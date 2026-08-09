@@ -1,0 +1,54 @@
+Phase 0 — Skeleton that compiles
+
+Learn: Makefile rules, project layout, the empty Server class shape.
+Work: a repo that builds ircserv doing nothing but printing "started." Commit.
+Verify: make produces the binary, runs clean.
+Why first: you always have something that compiles. Every later slice just extends a green build.
+
+Phase 1 — The socket chain (one slice per syscall)
+
+Slice 1 — argv: validate port+password → main + Server constructor storing them. Verify: bad args exit cleanly.
+Slice 2 — socket(): create the fd → Server::setup(). Verify: no error, fd ≥ 0.
+Slice 3 — setsockopt(): reusable port. Verify: restart twice, no "address in use."
+Slice 4 — bind(): fill sockaddr_in, claim port. Verify: it binds.
+Slice 5 — listen(): LISTEN state. Verify: ss -tlnp | grep <port> shows LISTEN.
+Slice 6 — accept() (blocking): one client fd. Verify: nc connects, prints "client connected."
+Commit after each slice. End of phase: a real server that accepts one client.
+
+Phase 2 — Non-blocking + one poll()
+
+Slice 1 — fcntl(O_NONBLOCK) on the listening socket. Verify: accept no longer freezes.
+Slice 2 — the poll() set + main loop watching the listening fd. Verify: loop runs, accepts on ready.
+Slice 3 — accept adds each client fd to the poll set → many clients. Verify: two nc sessions at once.
+Work: this becomes Server::run() — the heart of the project. Commit.
+Rule to internalize this phase: never recv/send an fd unless poll said it's ready. Instant-fail otherwise.
+
+Phase 3 — Per-client buffering
+
+Learn: TCP is a boundary-less stream (the com→man→d problem).
+Work: Client::_recvBuffer + append-on-recv + cut-on-\r\n. Verify: send one byte at a time via nc, still assembles.
+
+Phase 4 — Parsing
+
+Learn: :prefix CMD params :trailing grammar.
+Work: a stateless Parser turning a line into a Message struct + a dispatcher. Verify: feed raw lines, get correct structs.
+
+Phase 5 — Registration
+
+Learn: the PASS→NICK→USER state machine + numeric replies.
+Work: handlers + Client state flags + 001/433/464. Verify: a real client (HexChat/irssi) fully registers. Milestone — proves the whole pipeline.
+
+Phase 6 — Channels + relay
+
+Learn: a channel is a named member list; first joiner is operator.
+Work: Channel class, JOIN, PRIVMSG fan-out with prefix stamping. Verify: two clients chat through your server.
+
+Phase 7 — Operators + MODE
+
+Slice per command: KICK, INVITE, TOPIC, then MODE flags one at a time (i, t, k, o, l).
+Work: permission checks + mode state on Channel. Verify each flag enforces correctly.
+
+Phase 8 — Robustness
+
+Learn: the never-crash / no-leak discipline; ownership order (remove Client pointer from every Channel before Server deletes it).
+Work: disconnect cleanup, valgrind-clean. Verify: abrupt kills, garbage input, no crash, no leaks.
