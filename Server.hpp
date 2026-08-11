@@ -5,7 +5,6 @@
 #include <stdexcept>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include <poll.h>
 // #include <string.h>
 #include <cstring>
@@ -16,14 +15,8 @@
 #include <vector>
 #include <iostream>
 typedef struct pollfd pollfd;
-
-class client
-{
-	private:
-	
-	public:
-
-}
+#include "Client.hpp"
+#include <map>
 class Server
 {
 	private:
@@ -31,6 +24,7 @@ class Server
 		int _port;
 		std::string _password;
 		std::vector<int> _client_fds;
+		std::map<int, Client> _clients;
 		Server();
 	public:
 		Server(int	port, const std::string &pass): _lfd(-1), _port(port), _password(pass){}
@@ -61,6 +55,7 @@ class Server
          */
 		void Run()
 		{
+			
 			std::vector<pollfd> fds;
 			pollfd lfd;
 			lfd.fd = _lfd;
@@ -96,6 +91,7 @@ class Server
 							lmo3idat.events = POLLIN;
 							lmo3idat.revents = 0;
 							fds.push_back(lmo3idat);
+							_clients.insert(std::make_pair(incoming_call, Client(incoming_call))); // hna katpushi lclient jdid fmap dial clients li kayn f server
 
 						}
 						else // hna katchecki mn b3d okatla9a bl jondi li deja pushitih fliteration lwla okat9ol lih yala tla7 ojib lia 
@@ -108,11 +104,19 @@ class Server
 									// < 0 rah kain issue f socket handlih t7wa
 									close(fds[i].fd);
 									fds.erase(fds.begin() + i);
+									_clients.erase(fds[i].fd);
 									i--;
 									continue;
 								}
 								buffer[size] = '\0';
-								std::cout << "fd " << fds[i].fd << " sent: " << buffer;						
+								Client &client = _clients[fds[i].fd];
+								client.appendToBuffer(buffer, size);
+								std::string line;
+								while (client.extractCommand(line))
+								{
+									std::cout << "Received command from client " << fds[i].fd << ": " << line << std::endl;
+									// Here you would handle the command, e.g., parse it and respond accordingly.
+								}						
 						}
 					}
 				}
