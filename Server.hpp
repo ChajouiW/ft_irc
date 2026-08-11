@@ -111,12 +111,8 @@ class Server
 								buffer[size] = '\0';
 								Client &client = _clients[fds[i].fd];
 								client.appendToBuffer(buffer, size);
-								std::string line;
-								while (client.extractCommand(line))
-								{
-									std::cout << "Received command from client " << fds[i].fd << ": " << line << std::endl;
-									// Here you would handle the command, e.g., parse it and respond accordingly.
-								}						
+								
+								
 						}
 					}
 				}

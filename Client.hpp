@@ -35,14 +35,9 @@ class Client
 		// Returns true and fills `line` when a full command is available,
 		// false when the buffer only holds a partial one.
 		// Body comes in Slice 4.
-		bool	extractCommand(std::string &line)
+		std::string	extractCommand()
 		{
-			size_t pos = _buffer.find("\r\n");
-			if (pos == std::string::npos)
-				return false; // No complete command yet
-			line = _buffer.substr(0, pos);
-			_buffer.erase(0, pos + 2); // Remove the command and the \r\n
-			return true;
+			return _buffer;
 		};
 };
 
