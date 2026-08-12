@@ -102,9 +102,10 @@ class Server
 								{
 									// 0 sdha mn raso or client deconecta saf 
 									// < 0 rah kain issue f socket handlih t7wa
-									close(fds[i].fd);
+									int dead_fd = fds[i].fd; // khodo 9bel materasi, mn b3d lerase fds[i] rah wa7d akhor
+									close(dead_fd);
+									_clients.erase(dead_fd);
 									fds.erase(fds.begin() + i);
-									_clients.erase(fds[i].fd);
 									i--;
 									continue;
 								}
