@@ -28,6 +28,45 @@ class Server
 		Server();
 	public:
 		Server(int	port, const std::string &pass): _lfd(-1), _port(port), _password(pass){}
+		std::vector<std::string> split_cmd(const std::string &cmd)
+		{
+			std::vector<std::string> tokens;
+			std::istringstream stream(cmd);
+			std::string token;
+			while (stream >> token)
+			{
+				tokens.push_back(token);
+				token.clear();
+			}
+			return tokens;
+		}
+		void	setAuthenticated(bool auth) { _authenticated = auth; };
+		void	authenticate(std::string cmd, int fd);
+		void	set_nickname(std::string cmd, int fd);
+		void	set_username(std::vector<std::string> tokens, int fd);
+		void	disconnect(std::string cmd, int fd);
+		void	parse_cmd(const std::string &cmd, int fd)
+		{
+			std::vector<std::string> tokens = split_cmd(cmd);
+			if (!tokens.empty() && (tokens[0] == "PASS" || tokens[0] == "pass"))
+				authenticate(cmd, fd);
+			else if (!tokens.empty() && (tokens[0] == "NICK" || tokens[0] == "nick"))
+				set_nickname(cmd, fd);
+			else if (!tokens.empty() && (tokens[0] == "USER" || tokens[0] == "user"))
+				set_username(tokens, fd);
+			else if (!tokens.empty() && (tokens[0] == "QUIT" || tokens[0] == "quit"))
+				disconnect(cmd, fd);
+			else if ()
+			{
+				if (tokens.empty() && (tokens[0] == "invite" || tokens[0] == "invite"))
+					return;
+			}
+			else
+			{
+				
+				send()
+			}
+		}
 		void	setup()
 		{
 			sockaddr_in s;
@@ -114,8 +153,9 @@ class Server
 								Client &client = _clients[fds[i].fd];
 								client.appendToBuffer(buffer, size);
 								client.print();
-								std::string line = client.extractCommand(); // hna kat9ra lcommand li jiti mn client okat7to fbuffer dialo
-								std::cout << "Extracted command: " << line << std::endl;
+								std::vector<std::string> cmds = client.splitBuffer(); // hna kat9ra lcommand li jiti mn client okat7to fbuffer dialo
+								for (size_t j = 0; j < cmds.size(); j++)
+									this->parse_cmd(cmds[j], fds[i].fd); // hna katparse lcommand li jiti mn client okat9raha ffunction parse_cmd li kayn f server.cpp
 								
 						}
 					}

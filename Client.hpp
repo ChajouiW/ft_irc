@@ -2,7 +2,7 @@
 #define CLIENT_HPP
 
 #include <string>
-
+#include <sstream>
 /*
 ** Phase 3: a Client is just "a socket + the bytes we have read from it so far".
 ** Nickname / username / registration state come in Phase 5.
@@ -16,6 +16,7 @@ class Client
 	private:
 		int			_fd;
 		std::string	_buffer;
+		bool		_authenticated;
 
 	public:
 		Client() : _fd(-1), _buffer() {}
@@ -48,14 +49,19 @@ class Client
 		// Returns true and fills `line` when a full command is available,
 		// false when the buffer only holds a partial one.
 		// Body comes in Slice 4.
-		std::string	extractCommand()
+		std::vector<std::string>	splitBuffer()
 		{
-			size_t pos = _buffer.find("\r\n");
-			if (pos == std::string::npos)
-				return std::string();
-			std::string command = _buffer.substr(0, pos);
-			_buffer.erase(0, pos + 2);
-			return command;
+			std::vector<std::string> cmds;
+			std::istringstream stream(_buffer);
+			std::string line;
+			while (std::getline(stream, line))
+			{
+				size_t pos = line.find_first_of("\r\n");
+				if (pos != std::string::npos)
+					line = line.substr(0, pos);
+				cmds.push_back(line);
+			}
+			return cmds;
 		};
 };
 
