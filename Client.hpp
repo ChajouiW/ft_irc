@@ -34,7 +34,6 @@ class Client
 		void	setRegistered(bool reg);
 		bool	isRegistered() const;
 		int		getFd() const;
-		void 	
 		void	appendToBuffer(const char *data, size_t size);
 		void	print() const;
 		bool	extractCommand(std::string &line);
