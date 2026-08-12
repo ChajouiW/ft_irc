@@ -65,6 +65,7 @@ class Server
 		
 			while (true)
 			{
+				std::cout << "waiting clinet input" << std::endl;
 				if (poll(fds.data(), fds.size(), -1) < 0)
 				{
 					if (errno == EINTR)
@@ -112,7 +113,9 @@ class Server
 								buffer[size] = '\0';
 								Client &client = _clients[fds[i].fd];
 								client.appendToBuffer(buffer, size);
-								
+								client.print();
+								std::string line = client.extractCommand(); // hna kat9ra lcommand li jiti mn client okat7to fbuffer dialo
+								std::cout << "Extracted command: " << line << std::endl;
 								
 						}
 					}
