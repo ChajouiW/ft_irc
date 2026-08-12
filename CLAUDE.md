@@ -32,17 +32,53 @@ Read the "How to work with me" section before writing any code.
 
 ---
 
+## Deliverables (subject v10.0, Chapter V — not yet done)
+
+- **`README.md` is mandatory** and does not exist yet. Required contents:
+  - first line, italicized, exactly: *This project has been created as part of the 42 curriculum by
+    `<login>`* (add both logins if it stays a two-person project)
+  - a **Description** section (goal + brief overview)
+  - an **Instructions** section (compile, run)
+  - a **Resources** section: classic references **and a description of how AI was used — which
+    tasks, which parts of the project**
+  - written in English
+- Files to submit: `Makefile`, `*.{h,hpp}`, `*.cpp`, `*.tpp`, `*.ipp`, optional config file.
+- Bonus (file transfer, bot) is only graded if the mandatory part is **perfect**. Don't start it.
+- Defense includes a **live modification** request — a small behaviour change or data-structure
+  tweak, to be done in a few minutes. Practice explaining every file out loud.
+
 ## Hard constraints (from the subject — violating these is an instant fail)
 
 - **C++98 only.** No C++11: no `auto`, no `nullptr`, no range-for, no `std::to_string`, no move
   semantics. Remember there are no moves — a class put in a container gets **copied**, so any class
   holding an fd must not `close()` it in its destructor (rule of three).
 - **Must compile with** `-Wall -Wextra -Werror`.
-- **One and only one `poll()`** (or equivalent) for all I/O, listening socket included.
-- **Never `recv()` or `send()` on an fd unless `poll()` just said it is ready.** Non-negotiable.
+- **One and only one `poll()`** (or equivalent) for **read *and* write**, listening socket included.
+- **Never `recv()` or `send()` on an fd unless `poll()` just said it is ready.** The subject states
+  this outcome literally: doing so → **grade 0**. Sending therefore needs a per-client **out-buffer**
+  plus `POLLOUT` in the same poll set — a handler may never call `send()` directly.
 - **Everything non-blocking.** No blocking call may ever hang the server.
-- **The server must never crash and never leak** — not on abrupt disconnect, not on garbage input.
+- **The server must never crash and must never quit unexpectedly** — "even when it runs out of
+  memory". If it does, the project is non-functional and the grade is 0.
 - No forking, no threads. Single process, single loop.
+- **`fcntl` may be used *only* as `fcntl(fd, F_SETFL, O_NONBLOCK)`** — any other flag is forbidden,
+  so do not add an `F_GETFL` read-modify-write. Current usage is compliant; leave it alone.
+- Prefer C++ headers over C ones (`<cstring>`, not `<string.h>`). No external libs, no Boost.
+- `sleep` is **not** in the allowed-function list. Allowed and useful later: `signal`/`sigaction`
+  (clean shutdown, Phase 8), `getsockname`/`inet_ntoa`/`inet_ntop` (real host for the Phase 6
+  prefix).
+- **No server-to-server communication** — explicitly forbidden. Nothing will ever send us a prefix,
+  so `parsePrefix` exists only to survive garbage input, not because clients use it.
+
+## The subject's own Phase 3 test (run this one — it's what the evaluator types)
+
+```sh
+nc -C 127.0.0.1 6667
+com^Dman^Dd          # ctrl+D after 'com', after 'man', then 'd\n'
+```
+
+`-C` makes nc send CRLF; `ctrl+D` flushes without a newline. Our byte-at-a-time test is stricter,
+but this is the one in the PDF.
 
 ## Build
 
@@ -81,7 +117,7 @@ Why first: you always have something that compiles; every later slice extends a 
 
 This became `Server::Run()` — the heart of the project.
 
-### Phase 3 — Per-client buffering `[~]`  ← **WE ARE HERE**
+### Phase 3 — Per-client buffering `[x]`
 Learn: TCP is a boundary-less stream — one `send` can arrive as `com` → `man` → `d`, and two
 commands can arrive in a single `recv`. Message framing is **our** job, not TCP's.
 Work: `Client::_buffer` + append-on-recv + cut-on-`\r\n`.
@@ -89,22 +125,113 @@ Verify: send one byte at a time through `nc`, the command still assembles correc
 
 - `[x]` `Client` class shape: `_fd`, `_buffer`, `appendToBuffer(data, size)`, `getFd()`, destructor.
 - `[x]` `Server` holds `std::map<int, Client>`; accept inserts, disconnect erases.
-- `[~]` `extractCommand()` — currently a placeholder that returns the whole buffer and erases
-  nothing. Still needs: find `\r\n`, return only the bytes before it, erase those bytes **and** the
-  delimiter from `_buffer`, and report "no complete line yet" in a way an empty line can't fake.
-- `[ ]` `Server` drains in a **loop** after each `recv` — one read can carry several commands.
-- `[ ]` Verify with byte-at-a-time `nc`.
+- `[x]` `bool extractCommand(std::string &line)` — erase-on-extract. Keys on `'\n'` (**not**
+  `find_first_of("\r\n")`, which fired early when `\r` and `\n` arrived in different packets and
+  emitted a phantom empty command), then strips a trailing `\r` off the cut line. Bare `\n` is
+  accepted too, so interactive `nc` works.
+- `[x]` `Server` drains in a **loop** after each `recv` — one read can carry several commands.
+- `[x]` Verified: byte-at-a-time `nc` → 1 command; two commands in one write → 2; split
+  mid-command across packets → 1. Server survives all three.
 
-### Phase 4 — Parsing `[ ]`
+**Contract with Phase 4:** `extractCommand` hands out one line with `\r\n` already stripped,
+possibly empty, otherwise untouched. The parser never sees a delimiter; `extractCommand` never
+looks at a colon.
+
+### Phase 4 — Parsing `[x]`
 Learn: the `:prefix CMD params :trailing` grammar.
 Work: a **stateless** Parser turning one line into a `Message` struct + a dispatcher.
-Verify: feed raw lines, get correct structs.
+Verify: feed raw lines, get correct structs — no sockets involved.
 
-### Phase 5 — Registration `[ ]`
+- `[x]` `t_command` struct in `parser.hpp` (`command`, `params`, `trailing` — no `prefix`, see below).
+- `[x]` **1** `parse_command` — first word, uppercased via `toUpper`, leading spaces skipped.
+- `[x]` **2** `parse_args` — params split on runs of spaces, first `:`-token opens the trailing,
+  then the trailing is **also pushed as the last param** so `USER a b c :Real Name` is 4 params.
+  The colon is wire syntax, not meaning: handlers must not care whether the sender used one.
+- `[x]` **3** dispatcher on `Server`: `PASS NICK USER JOIN PRIVMSG MODE QUIT` + unknown fallback,
+  guarded by an empty-command early return so a bare `\r\n` dispatches nothing.
+- `[x]` **4** verified end to end through `nc` (table below).
+
+Verified (8/8), server-side through `nc`:
+
+| line | command | params | trailing |
+|---|---|---|---|
+| `PRIVMSG #general :hello there my friend` | PRIVMSG | `[#general]` | `hello there my friend` |
+| `PRIVMSG   #general    :time is 10:30` | PRIVMSG | `[#general]` | `time is 10:30` |
+| `USER a b c :Real Name` | USER | `[a, b, c]` | `Real Name` |
+| `MODE #chan +o hen` | MODE | `[#chan, +o, hen]` | |
+| `PRIVMSG #a :` | PRIVMSG | `[#a]` | |
+| `JOIN` | JOIN | `[]` | |
+| `pass hen` | PASS | `[hen]` | |
+| `quit` | QUIT | `[]` | |
+
+Two bugs fixed on the way, both the same shape — `start = space_pos + 1` lands *on* the next space
+when spaces repeat, pushing empty params. Use `find_first_not_of(' ', pos)` to move to the next
+real token. Free functions in a header need `inline`, or the linker reports multiple definition
+(member functions defined in a class body are implicitly inline; free functions are not).
+
+**`toUpper` must cast to `unsigned char`** before calling `std::toupper` — plain `char` is signed
+on Linux, and a byte ≥ 0x80 (any accented character) becomes a negative int, which is UB.
+
+**Decision — no `CAP` handling.** Real clients send `CAP LS 302` as their first line; it currently
+falls through to the unknown-command branch, which is harmless. Do not raise this again unless a
+reference client actually stalls during registration.
+
+**Decision — no prefix parsing.** Clients never send a prefix (the server already knows which
+socket the bytes came from), and server-to-server is explicitly forbidden by the subject, so no
+line we ever receive will carry one. A `:`-leading garbage line just produces a command that
+matches no handler — harmless. The `prefix` field stays in the struct but is only ever filled when
+we *generate* replies. Do not reopen this.
+
+Prefix **generation** is still mandatory in Phase 6: relayed messages must be stamped
+`:nick!user@host PRIVMSG #chan :text` or the reference client shows no author. That is string
+concatenation, not parsing.
+
+The Parser is stateless, so it lives in `parser.hpp` as free functions — not on `Client`
+(per-client state), not inlined in `Server`.
+
+Parked until this phase lands: `parse_cmd` (commented out in `Server.hpp`) and all of
+`Authentication.cpp` — both are Phase 5 code written early, and both hand-roll their own parsing
+(`cmd.substr(4)`). They get rebuilt on top of `Message`.
+
+### Phase 5 — Registration `[~]`  ← **WE ARE HERE**
 Learn: the PASS → NICK → USER state machine + numeric replies.
 Work: handlers + `Client` state flags + numerics 001 / 433 / 464.
 Verify: a real client (HexChat / irssi) fully registers.
 **Milestone — proves the whole pipeline end to end.**
+
+- `[ ]` **1 — the write path, first.** Nothing else in this phase can be verified without it. A
+  handler may **never** call `send()` (grade 0). Instead: a `_writeBuffer` on `Client`; handlers
+  append to it; `Run()` sets `POLLOUT` in that client's `events` **only when the buffer is
+  non-empty**; on `POLLOUT`, `send()` and erase **only the bytes actually sent** — `send` can write
+  fewer than you gave it. (This is the one idea worth taking from the `bircd` skeleton: its
+  `init_fd` does `if (strlen(buf_write) > 0) FD_SET(i, &fd_write);`.)
+- `[ ]` **2** `PASS` → wrong password gets `464 ERR_PASSWDMISMATCH`.
+- `[ ]` **3** `NICK` → uniqueness check across `_clients`; `433 ERR_NICKNAMEINUSE`,
+  `431 ERR_NONICKNAMEGIVEN`, `432 ERR_ERRONEUSNICKNAME`.
+- `[ ]` **4** `USER` → store username + realname.
+- `[ ]` **5** registration gate: once PASS+NICK+USER are all done, send `001 RPL_WELCOME`.
+  Commands before that get `451 ERR_NOTREGISTERED` — **except** the allowlist below.
+- `[ ]` **6** verify with a real client (HexChat / irssi), not just `nc`.
+
+**Numeric reply format — first param is always the recipient's nick:**
+
+```
+:localhost 001 hen :Welcome to the IRC network
+:localhost 433 hen newnick :Nickname is already in use
+:localhost 464 hen :Password incorrect
+```
+
+Leaving out the nick is the classic mistake; clients use it to confirm the reply is addressed to
+them.
+
+**Allowed before registration completes** (rejecting these breaks the reference client):
+
+```
+CAP   PASS   NICK   USER   PING   PONG   QUIT
+```
+
+`PING`/`PONG` are not in the subject's command list but are not optional — irssi and HexChat ping
+the server and disconnect if nothing answers.
 
 ### Phase 6 — Channels + relay `[ ]`
 Learn: a channel is a named member list; the first joiner is operator.
@@ -116,6 +243,18 @@ One slice per command: `KICK`, `INVITE`, `TOPIC`, then MODE flags one at a time:
 Work: permission checks + mode state on `Channel`.
 Verify: each flag enforces correctly.
 
+**Known parser limitation to fix here — empty trailing vs. no trailing.** `parse_args` pushes the
+trailing into `params` only `if (!cmd.trailing.empty())`, so these two collapse to the same struct:
+
+```
+TOPIC #chan          -> "show me the topic"
+TOPIC #chan :        -> "clear the topic"      <- currently indistinguishable
+```
+
+Fix: add a `bool has_trailing` to `t_command`, set it when `parse_args` hits the `:`, and push
+unconditionally on that flag instead of on `!empty()`. Harmless everywhere else — `PRIVMSG #a :`
+with an empty message is an error case either way (412 ERR_NOTEXTTOSEND).
+
 ### Phase 8 — Robustness `[ ]`
 Learn: the never-crash / no-leak discipline; **ownership order** — remove the Client pointer from
 every Channel *before* the Server destroys it.
@@ -126,10 +265,17 @@ Verify: abrupt kills, garbage input → no crash, no leaks.
 
 ## Known open bugs (not yet fixed — mine to fix)
 
-- `Server.hpp`, disconnect path: `fds.erase(fds.begin() + i)` runs **before**
-  `_clients.erase(fds[i].fd)`. After the vector erase, `fds[i]` is the *next* client, so the wrong
-  map entry is erased — and if `i` was the last element, it reads past the end. Save the fd into a
-  local before erasing from the vector.
+- No `.gitignore`. Build artifacts are **tracked**: `ircserv`, `a.out`, `compile_commands.json`,
+  `.idea/`, `.cache/clangd/`. `*.o` / `*.d` are untracked but a `git add -A` would sweep them in.
+- `Authentication.cpp` is fully commented out but listed in `SRCS`. When it comes back:
+  `disconnect` is defined **twice**, and `authenticated(fd)` should be `isAuthenticated(fd)`.
+- Its `send()` calls fire without `poll()` having reported `POLLOUT` on that fd — subject rule
+  violation, and a partial write / `EAGAIN` waiting to happen. Needs a per-client out-buffer
+  (Phase 8 territory, but do not forget it).
+
+**Fixed:** disconnect path used to `fds.erase(fds.begin() + i)` *before* `_clients.erase(fds[i].fd)`,
+so it erased the wrong map entry — and crashed with a `_GLIBCXX_ASSERTIONS` abort when the
+disconnecting client was the last element. Now the fd is saved into `dead_fd` first.
 
 ## Design decisions already made (don't relitigate)
 
