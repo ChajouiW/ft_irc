@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # ft_irc — project context for Claude
 
 An IRC server in C++98 (42 school project). The author is **learning the material while building it**.
@@ -51,7 +55,20 @@ make        # -> ./ircserv
 ./ircserv <port> <password>
 ```
 
-Header-only so far: `main.cpp` + `Server.hpp` + `Client.hpp`.
+Sources: `main.cpp`, `Server.cpp`, `Authentication.cpp`; headers `Server.hpp`, `Client.hpp`,
+`ft_irc.hpp`. `Server.hpp` and `Client.hpp` are still mostly method-bodies-in-the-header.
+
+**`make` does not currently link.** The Makefile still has `SRCS = main.cpp` only, so
+`Server.cpp` and `Authentication.cpp` are never compiled — every out-of-line method
+(`parse_cmd`, `authenticate`, `set_nickname`, `set_username`, `disconnect`) would be an undefined
+reference at link time. See "Known open bugs".
+
+There is no test suite. Verification is manual, per the *Verify* line of the current slice
+(`nc localhost <port>`, `ss -tlnp | grep <port>`, later a real IRC client).
+
+Stray files in the repo root that are **not** part of the build and should not be read as source:
+`a.out`, `f.txt`, `zoba3`, `bircd.tar.gz` (a reference implementation tarball),
+`Write vscode-mcp-setup.md (ne9kyk)`.
 
 ---
 
@@ -89,22 +106,41 @@ Verify: send one byte at a time through `nc`, the command still assembles correc
 
 - `[x]` `Client` class shape: `_fd`, `_buffer`, `appendToBuffer(data, size)`, `getFd()`, destructor.
 - `[x]` `Server` holds `std::map<int, Client>`; accept inserts, disconnect erases.
-- `[~]` `extractCommand()` — currently a placeholder that returns the whole buffer and erases
-  nothing. Still needs: find `\r\n`, return only the bytes before it, erase those bytes **and** the
-  delimiter from `_buffer`, and report "no complete line yet" in a way an empty line can't fake.
-- `[ ]` `Server` drains in a **loop** after each `recv` — one read can carry several commands.
-- `[ ]` Verify with byte-at-a-time `nc`.
+- `[~]` framing — `extractCommand()` was replaced by `Client::splitBuffer()`, which `getline`s the
+  whole buffer into a vector of lines. Two things still missing, and they are the *whole point* of
+  the phase: it **never erases the consumed bytes from `_buffer`**, so every `recv` re-emits all
+  previous commands; and a trailing fragment with no `\r\n` yet is handed back as if it were a
+  complete command. A partial line must stay in the buffer until its delimiter arrives.
+- `[x]` `Server` drains in a loop after each `recv` — `Run()` iterates `cmds` and calls `parse_cmd`
+  per line.
+- `[ ]` Verify with byte-at-a-time `nc`. **This is the gate for calling Phase 3 done.**
 
-### Phase 4 — Parsing `[ ]`
+### Phase 4 — Parsing `[~]`
 Learn: the `:prefix CMD params :trailing` grammar.
 Work: a **stateless** Parser turning one line into a `Message` struct + a dispatcher.
 Verify: feed raw lines, get correct structs.
 
-### Phase 5 — Registration `[ ]`
+- Reality: `Server::parse_cmd` (`Server.cpp`) is an if/else-if dispatcher on `tokens[0]`, and
+  `Server::split_cmd` is a whitespace tokenizer. There is no `Message` struct and no `:trailing`
+  handling yet — so `USER u 0 * :Real Name` does not parse correctly.
+- The comment at the top of `Server.hpp` wants a `std::map<std::string, handler>` dispatch table
+  instead of the if/else chain. In C++98 that means `typedef void (Server::*handler)(...)` — a
+  **pointer-to-member**, called as `(this->*table[cmd])(args)`. All handlers must then share one
+  signature; today they do not (`set_username` takes a token vector, the others take a string).
+
+### Phase 5 — Registration `[~]`
 Learn: the PASS → NICK → USER state machine + numeric replies.
 Work: handlers + `Client` state flags + numerics 001 / 433 / 464.
 Verify: a real client (HexChat / irssi) fully registers.
 **Milestone — proves the whole pipeline end to end.**
+
+- Reality: `Authentication.cpp` has `authenticate()` (PASS) written; `set_nickname`,
+  `set_username`, `disconnect` are empty stubs. `Client::_authenticated` exists but has no
+  accessors. Replies are plain English strings, not numerics.
+
+> **Note on ordering.** Code for Phases 4 and 5 landed before Phase 3's verify step passed —
+> the opposite of rule 1. Before adding anything new here, finish the framing fix and its
+> byte-at-a-time verification.
 
 ### Phase 6 — Channels + relay `[ ]`
 Learn: a channel is a named member list; the first joiner is operator.
@@ -126,10 +162,36 @@ Verify: abrupt kills, garbage input → no crash, no leaks.
 
 ## Known open bugs (not yet fixed — mine to fix)
 
-- `Server.hpp`, disconnect path: `fds.erase(fds.begin() + i)` runs **before**
-  `_clients.erase(fds[i].fd)`. After the vector erase, `fds[i]` is the *next* client, so the wrong
-  map entry is erased — and if `i` was the last element, it reads past the end. Save the fd into a
-  local before erasing from the vector.
+Ordered by what blocks the build first. **Do not fix these unsolicited** — rule 3 applies: name it,
+show the line, let me decide.
+
+*Compile / link blockers:*
+
+- `Server.hpp:52` — `setAuthenticated()` is defined on **`Server`** but assigns `_authenticated`,
+  which is a member of **`Client`**. This is the error `make` stops on right now. The setter belongs
+  on `Client`.
+- `Authentication.cpp:40` and `:44` — `Server::disconnect` is defined **twice**, identically.
+  Duplicate definition.
+- `Authentication.cpp:27` — calls `authenticated(fd)`, which is declared nowhere.
+- `Makefile:7` — `SRCS = main.cpp` only; `Server.cpp` and `Authentication.cpp` are never built.
+
+*Logic:*
+
+- `Client::splitBuffer()` never erases from `_buffer` and treats an unterminated trailing fragment
+  as a finished command — see Phase 3 above. This is the current slice.
+- `Server.hpp:35` — `_client_fds` is declared but never used; `Run()` keeps its poll set in a local
+  `fds` vector instead. Dead member.
+- `Authentication.cpp:16,21` — `send()` is called on an fd that `poll()` only reported as
+  `POLLIN`-ready, not `POLLOUT`-ready. That violates the "never send unless poll said so" constraint
+  and will need an outgoing per-client buffer + `POLLOUT` before Phase 8.
+- `Client.hpp` uses `std::cout` and `std::vector` without including `<iostream>` / `<vector>`;
+  `Server.hpp` uses `std::istringstream` without `<sstream>`. Both only compile because of include
+  order through `Server.hpp`. Fragile.
+
+*Fixed (kept for the lesson):*
+
+- ~~disconnect path erased from `fds` before `_clients`, so the wrong map entry was erased~~ —
+  fixed in `Server.hpp:133`: `dead_fd` is saved into a local first.
 
 ## Design decisions already made (don't relitigate)
 

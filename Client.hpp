@@ -3,6 +3,8 @@
 
 #include <string>
 #include <sstream>
+#include <vector>
+#include <iostream>
 /*
 ** Phase 3: a Client is just "a socket + the bytes we have read from it so far".
 ** Nickname / username / registration state come in Phase 5.
@@ -15,14 +17,35 @@ class Client
 {
 	private:
 		int			_fd;
+		std::string _ip;
 		std::string	_buffer;
-		bool		_authenticated;
+		std::string	_nick;
+		std::string _user;
+		std::string _realname;
+		bool		_pass;
+		bool		_registered;
 
 	public:
-		Client() : _fd(-1), _buffer() {}
-		Client(int fd) : _fd(fd), _buffer() {}
+		Client(int fd, const std::string &ip) : _fd(fd), _ip(ip), _buffer(""), _nick(""), _user(""), _realname(""), _pass(false), _registered(false) {}
+		Client(const Client &other) : _fd(other._fd), _ip(other._ip), _buffer(other._buffer), _nick(other._nick), _user(other._user), _realname(other._realname), _pass(other._pass), _registered(other._registered) {}
+		Client(){};
 		~Client() {}
+		
+		
+		void	setFd(int fd) { _fd = fd; }
+		void	setPass(bool pass) { _pass = pass; }
+		void	setRegistered(bool reg) { _registered = reg; }
+		void	setNick(const std::string &nick) { _nick = nick; }
+		void	setUser(const std::string &user) { _user = user; }
+		void	setRealname(const std::string &realname) { _realname = realname; }
 
+
+		bool	isPass() const { return _pass; }
+		bool	isRegistered() const { return _registered; }
+		std::string	getNick() const { return _nick; }
+		std::string	getUser() const { return _user; }
+		std::string	getRealname() const { return _realname; }
+		std::string	getIp() const { return _ip; }
 		int	getFd() const { return _fd; }
 
 		// Append the bytes just read from the socket. Length aware: recv() data
@@ -61,6 +84,7 @@ class Client
 					line = line.substr(0, pos);
 				cmds.push_back(line);
 			}
+			_buffer.clear();
 			return cmds;
 		};
 };
