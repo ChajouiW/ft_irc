@@ -1,23 +1,14 @@
 #ifndef SERVER_HPP
 #define SERVER_HPP
-#include <cstddef>
+
 #include <string>
-#include <stdexcept>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <poll.h>
-#include <arpa/inet.h>
-#include <cstring>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <cerrno>
 #include <vector>
-#include <iostream>
-#include <sstream>
-typedef struct pollfd pollfd;
-#include "Client.hpp"
 #include <map>
+#include <poll.h>
+
+typedef struct pollfd pollfd;
+
+#include "Client.hpp"
 #include "Command.hpp"
 
 // I WANT MAKE THE COMMAND AS KEY TO GET THERE METHODE FUNCTION LIKE MAP<"COMMAND", &FUNCTION> AND THEN I WILL CALL THE FUNCTION LIKE THIS map[command](args)
@@ -47,22 +38,9 @@ class Server
 		std::map<std::string, CmdHandler> _handlers;
 		Server();
 	public:
-		Server(int	port, const std::string &pass): _lfd(-1), _port(port), _password(pass)
-		{
-			// & o Server:: jouj wajibin: smiya dial member ma katwalich pointer b rasha
-			_handlers["PASS"] = &Server::checkPass;
-			_handlers["NICK"] = &Server::setNickname;
-			_handlers["USER"] = &Server::setUsername;
-			_handlers["QUIT"] = &Server::disconnect;
-			_handlers["PING"] = &Server::ping;
-			// _handlers["KICK"] = &Server::kick;
-			// _handlers["PRIVMSG"] = &Server::privmsg;
-			// _handlers["JOIN"] = &Server::join;
-			// _handlers["PART"] = &Server::part;
-			// _handlers["TOPIC"] = &Server::topic;
-			// _handlers["INVITE"] = &Server::invite;
-			// _handlers["MODE"] = &Server::mode;
-		};
+		Server(int	port, const std::string &pass);
+		~Server();
+
 		void	registerClient(int fd);
 		bool	isInUse(const std::string &nick);
 		std::vector<std::string> split_cmd(const std::string &cmd);
@@ -85,7 +63,7 @@ class Server
 		void    sendToClient(const std::string &message, int fd);
 
 		void	setup();
-		/* struct pollfd 
+		/* struct pollfd
                int   fd;        ///////file descriptor ///
                short events;    ///////requested events ///
                short revents;   ///////returned events ///
@@ -93,10 +71,5 @@ class Server
 		void	Run();
 		void	acceptCline(int &lfd, std::vector<pollfd> &fds);
 		void	existingClient(int &fd, std::vector<pollfd> &fds, size_t &i);
-		~Server()
-		{
-			if (_lfd >= 0)
-				close(_lfd);
-		}
 };
 #endif

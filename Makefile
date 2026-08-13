@@ -4,7 +4,7 @@ CXX			= c++
 CXXFLAGS	= -Wall -Wextra -Werror -std=c++98
 DEPFLAGS	= -MMD -MP
 
-SRCS		= main.cpp Server.cpp Authentication.cpp
+SRCS		= main.cpp Server.cpp Client.cpp Authentication.cpp
 
 OBJS		= $(SRCS:.cpp=.o)
 DEPS		= $(OBJS:.o=.d)

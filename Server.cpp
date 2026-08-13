@@ -1,6 +1,41 @@
 #include "Server.hpp"
 #include "Command.hpp"
+
 #include <cctype>
+#include <cstring>
+#include <cerrno>
+#include <stdexcept>
+#include <sstream>
+#include <iostream>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+Server::Server(int	port, const std::string &pass): _lfd(-1), _port(port), _password(pass)
+{
+	// & o Server:: jouj wajibin: smiya dial member ma katwalich pointer b rasha
+	_handlers["PASS"] = &Server::checkPass;
+	_handlers["NICK"] = &Server::setNickname;
+	_handlers["USER"] = &Server::setUsername;
+	_handlers["QUIT"] = &Server::disconnect;
+	_handlers["PING"] = &Server::ping;
+	// _handlers["KICK"] = &Server::kick;
+	// _handlers["PRIVMSG"] = &Server::privmsg;
+	// _handlers["JOIN"] = &Server::join;
+	// _handlers["PART"] = &Server::part;
+	// _handlers["TOPIC"] = &Server::topic;
+	// _handlers["INVITE"] = &Server::invite;
+	// _handlers["MODE"] = &Server::mode;
+}
+
+Server::~Server()
+{
+	if (_lfd >= 0)
+		close(_lfd);
+}
 
 void    toUppercase(std::string &str)
 {
