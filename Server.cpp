@@ -21,9 +21,11 @@ void	Server::parse_cmd(const std::string &cmd, int fd)
     cmds.command = cmds.args[0];
     toUppercase(cmds.command);
     cmds.args.erase(cmds.args.begin()); // remove the command from the args vector
-    if (cmd.find(":") != std::string::npos)
-        cmds.trailing = cmd.substr(cmd.find(":") + 1);
-
+    if (cmd.find(" :") != std::string::npos)
+        cmds.trailing = cmd.substr(cmd.find(" :") + 2);
+    if (!cmds.trailing.empty())
+        cmds.args.push_back(cmds.trailing);
+    // std::cout << "TRAILING : " << cmds.trailing << std::endl;
     std::map<std::string, CmdHandler>::iterator it = _handlers.find(cmds.command);
     if (it == _handlers.end())
         {sendToClient(ERR_UNKNOWNCOMMAND(_clients[fd].getNick(), cmds.command), fd); return ;}// command ma kaynach: mn b3d 421 ERR_UNKNOWNCOMMAND
@@ -151,6 +153,8 @@ std::vector<std::string>    Server::split_cmd(const std::string &cmd)
     std::string token;
     while (stream >> token)
     {
+        if (token[0] == ':')
+            break;
         tokens.push_back(token);
         token.clear();
     }

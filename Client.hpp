@@ -81,10 +81,12 @@ class Client
 			{
 				size_t pos = line.find_first_of("\r\n");
 				if (pos != std::string::npos)
+				{
 					line = line.substr(0, pos);
-				cmds.push_back(line);
+					_buffer = _buffer.substr(pos + 2);
+					cmds.push_back(line);
+				}
 			}
-			_buffer.clear();
 			return cmds;
 		};
 };

@@ -35,7 +35,7 @@ bool    isValidNickname(const std::string &nick)
 
 void Server::	setNickname(const Command &cmds, int fd)
 {
-    if (cmds.args.size() < 1)
+    if (cmds.args.size() < 1 && cmds.trailing.empty())
     {
         sendToClient(ERR_NONICKNAMEGIVEN(_clients[fd].getNick()), fd);
         return;
