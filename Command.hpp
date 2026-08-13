@@ -33,4 +33,4 @@
 #define ERR_BADCHANNELKEY(nickname, channel) (":" SERVER_NAME " 475 " + nickname + " " + channel + " :Cannot join channel (+k)\r\n")
 #define ERR_CHANOPRIVSNEEDED(nickname, channel) (":" SERVER_NAME " 482 " + nickname + " " + channel + " :You're not channel operator\r\n")
 
-#endif // COMMAND_HPP
+#endif
