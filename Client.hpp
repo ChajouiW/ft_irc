@@ -23,6 +23,7 @@ class Client
 		std::string _realname;
 		bool		_pass;
 		bool		_registered;
+		std::string _writeBuffer; // For future use: when we want to send data to the client, we will write it here and then flush it to the socket.
 
 	public:
 		Client(int fd, const std::string &ip);
@@ -37,6 +38,11 @@ class Client
 		void	setNick(const std::string &nick);
 		void	setUser(const std::string &user);
 		void	setRealname(const std::string &realname);
+		void	setWriteBuffer(const std::string &buffer);
+		std::string	getWriteBuffer() const;
+		void	appendWriteBuffer(const std::string &msg); // handlers kaykketbo hna, ma kaysiftou walo
+		bool	hasPendingWrite() const;                   // bach n3rfo wach ntelbo POLLOUT wla la
+		void	consumeWriteBuffer(size_t n);              // kaymse7 ghir loctets li send() khda b3da
 
 
 		bool	isPass() const;

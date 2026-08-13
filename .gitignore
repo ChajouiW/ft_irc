@@ -1,0 +1,13 @@
+# build artifacts
+*.o
+*.d
+ircserv
+a.out
+
+# editor / tooling (generated, machine-specific)
+.cache/
+.idea/
+compile_commands.json
+
+# WSL download metadata
+*:Zone.Identifier

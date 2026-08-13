@@ -61,6 +61,7 @@ class Server
 		// void	mode(const Command &cmds, int fd);
 
 		void    sendToClient(const std::string &message, int fd);
+		void	flushClient(int fd); // kaytnada GHIR mli poll() 3tana POLLOUT 3la had lfd
 
 		void	setup();
 		/* struct pollfd

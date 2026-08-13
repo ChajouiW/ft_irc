@@ -4,7 +4,7 @@
 
 Client::Client(int fd, const std::string &ip) : _fd(fd), _ip(ip), _buffer(""), _nick(""), _user(""), _realname(""), _pass(false), _registered(false) {}
 
-Client::Client(const Client &other) : _fd(other._fd), _ip(other._ip), _buffer(other._buffer), _nick(other._nick), _user(other._user), _realname(other._realname), _pass(other._pass), _registered(other._registered) {}
+Client::Client(const Client &other) : _fd(other._fd), _ip(other._ip), _buffer(other._buffer), _nick(other._nick), _user(other._user), _realname(other._realname), _pass(other._pass), _registered(other._registered), _writeBuffer(other._writeBuffer) {}
 
 Client::Client(){}
 
@@ -93,4 +93,30 @@ std::vector<std::string>	Client::splitBuffer()
 		cmds.push_back(line);
 	}
 	return cmds;
+}
+
+void	Client::setWriteBuffer(const std::string &buffer) { _writeBuffer = buffer; }
+
+std::string	Client::getWriteBuffer() const { return _writeBuffer; }
+
+void	Client::appendWriteBuffer(const std::string &msg)
+{
+	_writeBuffer += msg;
+}
+
+bool	Client::hasPendingWrite() const
+{
+	return !_writeBuffer.empty();
+}
+
+/*
+** send() ymken ykhod 9ell mn li 3titih (socket non-blocking, buffer dial kernel
+** 3amer). donc kanmes7o ghir loctets li mchaw b3da, lba9i ytsift f POLLOUT jay.
+*/
+void	Client::consumeWriteBuffer(size_t n)
+{
+	if (n >= _writeBuffer.size())
+		_writeBuffer.clear();
+	else
+		_writeBuffer.erase(0, n);
 }

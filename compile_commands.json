@@ -1,7 +1,0 @@
-[
-  {
-    "directory": "/home/hen/pc/ft_irc",
-    "command": "/usr/bin/c++ -Wall -Wextra -Werror -std=c++98 -c main.cpp -o main.o",
-    "file": "/home/hen/pc/ft_irc/main.cpp"
-  }
-]

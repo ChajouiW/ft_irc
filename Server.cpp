@@ -42,9 +42,35 @@ void    toUppercase(std::string &str)
     for (size_t i = 0; i < str.size(); i++)
         str[i] = std::toupper(str[i]);
 }
+/*
+** ma kansiftou WALO mn hna. kanzido ghir f _writeBuffer dial dak client, o Run()
+** ghadi ykhelli POLLOUT f events dialo mli lbuffer machi khawi.
+** subject: send/recv 3la chi fd bla ma poll() i9ol belli wajed => note 0.
+*/
 void    Server::sendToClient(const std::string &message, int fd)
 {
-    send(fd, message.c_str(), message.size(), 0);
+    std::map<int, Client>::iterator it = _clients.find(fd);
+    if (it == _clients.end())
+        return ;
+    it->second.appendWriteBuffer(message);
+}
+
+/*
+** hadi kaytnada ghir mn Run() mli poll() 3tana POLLOUT.
+** send() ymken ykhod 9ell mn li 3titih => kanmes7o ghir li mcha b3da, lba9i
+** kayb9a f buffer o ytsift f dowra jaya (dak chi 3lach consumeWriteBuffer).
+*/
+void    Server::flushClient(int fd)
+{
+    std::map<int, Client>::iterator it = _clients.find(fd);
+    if (it == _clients.end() || !it->second.hasPendingWrite())
+        return ;
+    std::string out = it->second.getWriteBuffer();
+    ssize_t n = send(fd, out.c_str(), out.size(), 0);
+    if (n > 0)
+        it->second.consumeWriteBuffer(static_cast<size_t>(n));
+    else if (n < 0)
+        it->second.setWriteBuffer(""); // socket khayb: kanhaydo lbuffer bach ma ndoroch f loop bla 7dod 3la POLLOUT
 }
 void	Server::parse_cmd(const std::string &cmd, int fd)
 {
@@ -161,6 +187,18 @@ void    Server::Run()
     std::cout << "waiting clinet input" << std::endl;
     while (true)
     {
+        // 9bel kol poll kanwajdo events mn jdid: POLLOUT GHIR ila kayn chi 7aja msnya.
+        // socket li send buffer dialo khawi rah DIMA writable, donc ila khellina POLLOUT
+        // dima 7adr, poll() irje3 f tnach = loop 3la 100% CPU bla ma tdir walo.
+        for (size_t i = 0; i < fds.size(); i++)
+        {
+            if (fds[i].fd == _lfd)
+                continue ;
+            fds[i].events = POLLIN;
+            std::map<int, Client>::iterator it = _clients.find(fds[i].fd);
+            if (it != _clients.end() && it->second.hasPendingWrite())
+                fds[i].events |= POLLOUT;
+        }
         if (poll(fds.data(), fds.size(), -1) < 0)
         {
             if (errno == EINTR)
@@ -169,15 +207,19 @@ void    Server::Run()
         }
         for (size_t i = 0; i < fds.size();i++)
         {
+            // POLLOUT 9bel POLLIN wajib: existingClient ymken imse7 lclient mn fds o idir i--,
+            // o mn dak lwe9t fds[i] rah wa7d akhor => ghadi nsiftou lbuffer l client ghalet.
+            if (fds[i].revents & POLLOUT)
+                flushClient(fds[i].fd);
             if (fds[i].revents & POLLIN)
             {
                 if (fds[i].fd == _lfd)
                     acceptCline(_lfd, fds);
-                else // hna katchecki mn b3d okatla9a bl jondi li deja pushitih fliteration lwla okat9ol lih yala tla7 ojib lia 
+                else // hna katchecki mn b3d okatla9a bl jondi li deja pushitih fliteration lwla okat9ol lih yala tla7 ojib lia
                     existingClient(fds[i].fd, fds, i);
             }
         }
-        
+
     }
 }
 
