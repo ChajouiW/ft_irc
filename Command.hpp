@@ -32,5 +32,5 @@
 #define ERR_INVITEONLYCHAN(nickname, channel) (":" SERVER_NAME " 473 " + nickname + " " + channel + " :Cannot join channel (+i)\r\n")
 #define ERR_BADCHANNELKEY(nickname, channel) (":" SERVER_NAME " 475 " + nickname + " " + channel + " :Cannot join channel (+k)\r\n")
 #define ERR_CHANOPRIVSNEEDED(nickname, channel) (":" SERVER_NAME " 482 " + nickname + " " + channel + " :You're not channel operator\r\n")
-
+#define RPL_ALREADYJOINED(nickname, channel) (":" SERVER_NAME " 443 " + nickname + " " + channel + " :is already on channel\r\n")
 #endif

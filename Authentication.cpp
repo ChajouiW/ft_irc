@@ -9,7 +9,7 @@ void	Server::registerClient(int fd)
 	if (_clients[fd].isPass() && !_clients[fd].getNick().empty() && !_clients[fd].getUser().empty())
 	{
 		_clients[fd].setRegistered(true);
-		sendToClient(RPL_WELCOME(_clients[fd].getNick(), _clients[fd].getUser(), _clients[fd].getRealname()), fd);
+		sendToClient(RPL_WELCOME(_clients[fd].getNick(), _clients[fd].getUser(), _clients[fd].getIp()), fd);
 	}
 }
 
@@ -53,7 +53,7 @@ bool	isValidNickname(const std::string &nick)
 
 void	Server::setNickname(const Command &cmds, int fd)
 {
-	if (cmds.args.size() < 1 && cmds.trailing.empty())
+	if (cmds.args.size() < 1)
 	{
 		sendToClient(ERR_NONICKNAMEGIVEN(_clients[fd].getNick()), fd);
 		return;

@@ -25,6 +25,7 @@ Server::Server(int port, const std::string &pass) : _lfd(-1), _port(port), _pass
 	_handlers["USER"] = &Server::setUsername;
 	_handlers["QUIT"] = &Server::disconnect;
 	_handlers["PING"] = &Server::ping;
+    _handlers["JOIN"] = &Server::joinChannel;
 }
 
 Server::~Server()
@@ -65,6 +66,38 @@ void	Server::setup()
 /*                           write path (POLLOUT)                             */
 /* ========================================================================== */
 
+const std::string Server::getMembersList(std::string channelName)
+{
+    std::string membersList;
+    std::map<std::string, Channel>::iterator channelIt = _channels.find(toUppercase(channelName));
+    if (channelIt == _channels.end())
+        return membersList;
+    for (std::set<int>::iterator it = channelIt->second.getOperators().begin(); it != channelIt->second.getOperators().end(); ++it)
+    {
+        membersList += "@" + _clients[*it].getNick();
+        if (*it != *channelIt->second.getOperators().rbegin() || !channelIt->second.getMembers().empty())
+            membersList += " ";
+    }
+    for (std::set<int>::iterator it = channelIt->second.getMembers().begin(); it != channelIt->second.getMembers().end(); ++it)
+    {
+        membersList += _clients[*it].getNick();
+        if (*it != *channelIt->second.getMembers().rbegin())
+            membersList += " ";
+    }
+    return membersList;
+}
+
+void    Server::broadcastMessage(const std::string& channelName, const std::string &message)
+{
+    std::map<std::string, Channel>::const_iterator it = _channels.find(channelName);
+    if (it == _channels.end())
+        return;
+    for (std::set<int>::iterator opIt = it->second.getOperators().begin(); opIt != it->second.getOperators().end(); ++opIt)
+        sendToClient(message, *opIt);
+    for (std::set<int>::iterator memberIt = it->second.getMembers().begin(); memberIt != it->second.getMembers().end(); ++memberIt)
+        sendToClient(message, *memberIt);
+}
+
 void	Server::sendToClient(const std::string &message, int fd)
 {
 	std::map<int, Client>::iterator it = _clients.find(fd);
@@ -94,10 +127,11 @@ void	Server::flushClient(int fd)
 /*                            parsing + dispatch                              */
 /* ========================================================================== */
 
-void	toUppercase(std::string &str)
+std::string	toUppercase(std::string str)
 {
 	for (size_t i = 0; i < str.size(); i++)
-		str[i] = std::toupper(str[i]);
+		str[i] = static_cast<unsigned char>(std::toupper(str[i]));
+    return str;
 }
 
 std::vector<std::string>	Server::split_cmd(const std::string &cmd)
@@ -125,7 +159,7 @@ Command	Server::buildCommand(const std::string &line)
 		return cmds;
 
 	cmds.command = cmds.args[0];
-	toUppercase(cmds.command);
+	cmds.command = toUppercase(cmds.command);
 	cmds.args.erase(cmds.args.begin());
 
 	if (line.find(" :") != std::string::npos)

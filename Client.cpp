@@ -6,7 +6,7 @@ Client::Client(int fd, const std::string &ip) : _fd(fd), _ip(ip), _buffer(""), _
 
 Client::Client(const Client &other) : _fd(other._fd), _ip(other._ip), _buffer(other._buffer), _nick(other._nick), _user(other._user), _realname(other._realname), _pass(other._pass), _registered(other._registered), _writeBuffer(other._writeBuffer) {}
 
-Client::Client(){}
+Client::Client(): _fd(-1), _ip(""), _buffer(""), _nick(""), _user(""), _realname(""), _pass(false), _registered(false) {}
 
 Client::~Client() {}
 
@@ -45,12 +45,12 @@ void	Client::print() const
 {
 	for (size_t i = 0; i < _buffer.size(); i++)
 	{
-		if (_buffer[i] == '\r')
-			std::cout << "\\r";
-		else if (_buffer[i] == '\n')
-			std::cout << "\\n ";
-		else
-			std::cout << _buffer[i];
+		// if (_buffer[i] == '\r')
+		// 	std::cout << "\\r";
+		// else if (_buffer[i] == '\n')
+		// 	std::cout << "\\n ";
+		// else
+		// 	std::cout << _buffer[i];
 	}
 }
 
@@ -92,4 +92,10 @@ void	Client::consumeWriteBuffer(size_t n)
 		_writeBuffer.clear();
 	else
 		_writeBuffer.erase(0, n);
+}
+
+std::string	Client::getPrefix() const
+{
+	std::string prefix = ":" + _nick + "!" + _user + "@" + _ip;
+	return prefix;
 }

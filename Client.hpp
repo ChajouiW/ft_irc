@@ -30,7 +30,9 @@ class Client
 		void	setUser(const std::string &user);
 		void	setRealname(const std::string &realname);
 		void	setWriteBuffer(const std::string &buffer);
+
 		std::string	getWriteBuffer() const;
+		std::string getPrefix() const;
 		void	appendWriteBuffer(const std::string &msg);
 		bool	hasPendingWrite() const;
 		void	consumeWriteBuffer(size_t n);
