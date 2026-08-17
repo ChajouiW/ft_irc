@@ -27,9 +27,11 @@ class Channel
 
         bool addMember(int fd);
 		bool addOperator(int fd);
+		void cancelInvits(int fd);
         void removeMember(int fd);
         bool isMember(int fd) const;
 		bool isOperator(int fd) const;
+		bool isInChannel(int fd) const;
 
 		//getters
         const std::set<int>&	getMembers() const;

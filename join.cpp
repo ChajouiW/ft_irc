@@ -1,6 +1,5 @@
 #include "Server.hpp"
 #include "Command.hpp"
-#include <iostream>
 #include <utility>
 #include <sstream>
 

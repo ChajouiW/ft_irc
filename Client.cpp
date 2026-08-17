@@ -2,11 +2,28 @@
 
 #include <iostream>
 
-Client::Client(int fd, const std::string &ip) : _fd(fd), _ip(ip), _buffer(""), _nick(""), _user(""), _realname(""), _pass(false), _registered(false) {}
+Client::Client(int fd, const std::string &ip) : _fd(fd), _ip(ip), _buffer(""), _nick("*"), _user(""), _realname(""), _pass(false), _registered(false) {}
 
 Client::Client(const Client &other) : _fd(other._fd), _ip(other._ip), _buffer(other._buffer), _nick(other._nick), _user(other._user), _realname(other._realname), _pass(other._pass), _registered(other._registered), _writeBuffer(other._writeBuffer) {}
 
-Client::Client(): _fd(-1), _ip(""), _buffer(""), _nick(""), _user(""), _realname(""), _pass(false), _registered(false) {}
+Client::Client(): _fd(-1), _ip(""), _buffer(""), _nick("*"), _user(""), _realname(""), _pass(false), _registered(false) {}
+
+Client& Client::operator=(const Client &other)
+{
+	if (this != &other)
+	{
+		_fd = other._fd;
+		_ip = other._ip;
+		_buffer = other._buffer;
+		_nick = other._nick;
+		_user = other._user;
+		_realname = other._realname;
+		_pass = other._pass;
+		_registered = other._registered;
+		_buffer = other._buffer;
+	}
+	return *this;
+}
 
 Client::~Client() {}
 

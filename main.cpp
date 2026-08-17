@@ -2,7 +2,6 @@
 
 #include <cstdlib>
 
-#include <iostream>
 int main (int ac, char **argv)
 {
 	if (ac != 3)

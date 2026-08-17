@@ -21,6 +21,7 @@ class Client
 		Client(int fd, const std::string &ip);
 		Client(const Client &other);
 		Client();
+		Client& operator=(const Client &other);
 		~Client();
 
 		void	setFd(int fd);

@@ -1,12 +1,12 @@
 #include "Server.hpp"
 
 /* ========================================================================== */
-/*                              registration                                  */
+/*				registration								  */
 /* ========================================================================== */
 
 void	Server::registerClient(int fd)
 {
-	if (_clients[fd].isPass() && !_clients[fd].getNick().empty() && !_clients[fd].getUser().empty())
+	if (_clients[fd].isPass() && _clients[fd].getNick() != "*" && !_clients[fd].getUser().empty())
 	{
 		_clients[fd].setRegistered(true);
 		sendToClient(RPL_WELCOME(_clients[fd].getNick(), _clients[fd].getUser(), _clients[fd].getIp()), fd);
@@ -14,7 +14,7 @@ void	Server::registerClient(int fd)
 }
 
 /* ========================================================================== */
-/*                                  PASS                                      */
+/*				  PASS									  */
 /* ========================================================================== */
 
 void	Server::checkPass(const Command &cmds, int fd)
@@ -36,7 +36,7 @@ void	Server::checkPass(const Command &cmds, int fd)
 }
 
 /* ========================================================================== */
-/*                                  NICK                                      */
+/*				  NICK									  */
 /* ========================================================================== */
 
 bool	isValidNickname(const std::string &nick)
@@ -45,7 +45,7 @@ bool	isValidNickname(const std::string &nick)
 		return false;
 	for (size_t i = 0; i < nick.size(); i++)
 	{
-		if (!std::isalnum(nick[i]) &&  nick[i] != '_')
+		if (!std::isalnum(static_cast<unsigned char>(nick[i])) &&  nick[i] != '_')
 			return false;
 	}
 	return true;
@@ -96,14 +96,14 @@ bool	Server::isInUse(const std::string &nick)
 {
 	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
 	{
-		if (it->second.getNick() == nick)
+		if (toUppercase(it->second.getNick()) == toUppercase(nick))
 			return true;
 	}
 	return false;
 }
 
 /* ========================================================================== */
-/*                                  USER                                      */
+/*				  USER									  */
 /* ========================================================================== */
 
 void	Server::setUsername(const Command &cmds, int fd)
@@ -137,13 +137,47 @@ void	Server::setUsername(const Command &cmds, int fd)
 }
 
 /* ========================================================================== */
-/*                              QUIT / PING                                   */
+/*				QUIT / PING		   */
 /* ========================================================================== */
 
-void	Server::disconnect(const Command &cmds, int fd)
+void	Server::removeClientFromChannels(int fd, const std::string &quitMessage)
 {
-	(void)cmds;
-	(void)fd;
+	for (std::map<std::string, Channel>::iterator it = _channels.begin(); it != _channels.end();)
+	{
+		std::map<std::string, Channel>::iterator tmp = it++;
+		tmp->second.cancelInvits(fd);
+		if (tmp->second.isInChannel(fd))
+		{
+			broadcastMessage(tmp->first, _clients[fd].getPrefix() + " QUIT :" + quitMessage + "\r\n", fd);
+			tmp->second.removeMember(fd);
+			if (tmp->second.getMembers().empty() && tmp->second.getOperators().empty())
+				_channels.erase(tmp);
+		}
+	}
+}
+
+void	Server::disconnect(int fd, const std::string &quitMessage)
+{
+	if (_clients.find(fd) == _clients.end())
+		return;
+	std::cout << "Client disconnected: " << _clients[fd].getFd() << std::endl;
+	std::vector<pollfd>::iterator it = std::find_if(_fds.begin(), _fds.end(), findPollFd(fd));
+	if (it != _fds.end())
+		_fds.erase(it);
+	removeClientFromChannels(fd, quitMessage);
+	_clients.erase(fd);
+	close(fd);
+}
+
+void	Server::quit(const Command &cmds, int fd)
+{
+	std::string quitMessage = "Client Quit";
+	if (!cmds.trailing.empty())
+		quitMessage = cmds.trailing;
+	else if (!cmds.args.empty())
+		quitMessage = cmds.args[0];
+
+	disconnect(fd, quitMessage);
 }
 
 void	Server::ping(const Command &cmds, int fd)

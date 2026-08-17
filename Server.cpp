@@ -1,21 +1,8 @@
 #include "Server.hpp"
 #include "Command.hpp"
 
-#include <cctype>
-#include <cstring>
-#include <cerrno>
-#include <stdexcept>
-#include <sstream>
-#include <iostream>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <fcntl.h>
-#include <unistd.h>
-
 /* ========================================================================== */
-/*                              construction                                  */
+/*							  construction								  */
 /* ========================================================================== */
 
 Server::Server(int port, const std::string &pass) : _lfd(-1), _port(port), _password(pass)
@@ -23,19 +10,37 @@ Server::Server(int port, const std::string &pass) : _lfd(-1), _port(port), _pass
 	_handlers["PASS"] = &Server::checkPass;
 	_handlers["NICK"] = &Server::setNickname;
 	_handlers["USER"] = &Server::setUsername;
-	_handlers["QUIT"] = &Server::disconnect;
+	_handlers["QUIT"] = &Server::quit;
 	_handlers["PING"] = &Server::ping;
-    _handlers["JOIN"] = &Server::joinChannel;
+	_handlers["JOIN"] = &Server::joinChannel;
+	_handlers["PRIVMSG"] = &Server::privMsg;
+	_handlers["KICK"] = &Server::kick;
 }
 
 Server::~Server()
 {
-	if (_lfd >= 0)
-		close(_lfd);
+	std::cout << "Server shutting down..." << std::endl;
+	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+		close(it->first);
+	close(_lfd);
 }
 
 /* ========================================================================== */
-/*                                 setup                                      */
+/*							  getters									  */
+/* ========================================================================== */
+
+int	Server::getClientfd(const std::string &nick)
+{
+	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+	{
+		if (toUppercase(it->second.getNick()) == toUppercase(nick))
+			return it->first;
+	}
+	return -1;
+}
+
+/* ========================================================================== */
+/*								 setup									  */
 /* ========================================================================== */
 
 void	Server::setup()
@@ -63,39 +68,52 @@ void	Server::setup()
 }
 
 /* ========================================================================== */
-/*                           write path (POLLOUT)                             */
+/*						   write path (POLLOUT)							 */
 /* ========================================================================== */
 
 const std::string Server::getMembersList(std::string channelName)
 {
-    std::string membersList;
-    std::map<std::string, Channel>::iterator channelIt = _channels.find(toUppercase(channelName));
-    if (channelIt == _channels.end())
-        return membersList;
-    for (std::set<int>::iterator it = channelIt->second.getOperators().begin(); it != channelIt->second.getOperators().end(); ++it)
-    {
-        membersList += "@" + _clients[*it].getNick();
-        if (*it != *channelIt->second.getOperators().rbegin() || !channelIt->second.getMembers().empty())
-            membersList += " ";
-    }
-    for (std::set<int>::iterator it = channelIt->second.getMembers().begin(); it != channelIt->second.getMembers().end(); ++it)
-    {
-        membersList += _clients[*it].getNick();
-        if (*it != *channelIt->second.getMembers().rbegin())
-            membersList += " ";
-    }
-    return membersList;
+	std::string membersList;
+	std::map<std::string, Channel>::iterator channelIt = _channels.find(toUppercase(channelName));
+	if (channelIt == _channels.end())
+		return membersList;
+
+	for (std::set<int>::iterator it = channelIt->second.getOperators().begin(); it != channelIt->second.getOperators().end(); ++it)
+		membersList += "@" + _clients[*it].getNick() + " ";
+	for (std::set<int>::iterator it = channelIt->second.getMembers().begin(); it != channelIt->second.getMembers().end(); ++it)
+		membersList += _clients[*it].getNick() + " ";
+		
+	membersList.erase(membersList.length() - 1);
+	return membersList;
 }
 
-void    Server::broadcastMessage(const std::string& channelName, const std::string &message)
+void	Server::broadcastMessage(const std::string& channelName, const std::string &message)
 {
-    std::map<std::string, Channel>::const_iterator it = _channels.find(channelName);
-    if (it == _channels.end())
-        return;
-    for (std::set<int>::iterator opIt = it->second.getOperators().begin(); opIt != it->second.getOperators().end(); ++opIt)
-        sendToClient(message, *opIt);
-    for (std::set<int>::iterator memberIt = it->second.getMembers().begin(); memberIt != it->second.getMembers().end(); ++memberIt)
-        sendToClient(message, *memberIt);
+	std::map<std::string, Channel>::const_iterator it = _channels.find(channelName);
+	if (it == _channels.end())
+		return;
+	for (std::set<int>::iterator opIt = it->second.getOperators().begin(); opIt != it->second.getOperators().end(); ++opIt)
+		sendToClient(message, *opIt);
+	for (std::set<int>::iterator memberIt = it->second.getMembers().begin(); memberIt != it->second.getMembers().end(); ++memberIt)
+		sendToClient(message, *memberIt);
+}
+
+void	Server::broadcastMessage(const std::string& channelName, const std::string &message, int fd)
+{
+	std::map<std::string, Channel>::const_iterator it = _channels.find(channelName);
+	if (it == _channels.end())
+		return;
+	for (std::set<int>::iterator opIt = it->second.getOperators().begin(); opIt != it->second.getOperators().end(); ++opIt)
+	{
+		if (*opIt != fd)
+			sendToClient(message, *opIt);
+	}
+
+	for (std::set<int>::iterator memberIt = it->second.getMembers().begin(); memberIt != it->second.getMembers().end(); ++memberIt)
+	{
+		if (*memberIt != fd)
+			sendToClient(message, *memberIt);
+	}
 }
 
 void	Server::sendToClient(const std::string &message, int fd)
@@ -119,19 +137,19 @@ void	Server::flushClient(int fd)
 
 	if (n > 0)
 		it->second.consumeWriteBuffer(static_cast<size_t>(n));
-	else if (n < 0)
-		it->second.setWriteBuffer("");
+	// else if (n < 0)
+	// 	it->second.setWriteBuffer("");
 }
 
 /* ========================================================================== */
-/*                            parsing + dispatch                              */
+/*							parsing + dispatch							  */
 /* ========================================================================== */
 
 std::string	toUppercase(std::string str)
 {
 	for (size_t i = 0; i < str.size(); i++)
-		str[i] = static_cast<unsigned char>(std::toupper(str[i]));
-    return str;
+		str[i] = static_cast<unsigned char>(std::toupper(static_cast<unsigned char>(str[i])));
+	return str;
 }
 
 std::vector<std::string>	Server::split_cmd(const std::string &cmd)
@@ -194,15 +212,14 @@ void	Server::parse_cmd(const std::string &cmd, int fd)
 		sendToClient(ERR_NOTREGISTERED(_clients[fd].getNick()), fd);
 		return ;
 	}
-
 	(this->*(it->second))(cmds, fd);
 }
 
 /* ========================================================================== */
-/*                              boucle principale                             */
+/*							  boucle principale							 */
 /* ========================================================================== */
 
-void	Server::acceptCline(int &lfd, std::vector<pollfd> &fds)
+void	Server::acceptCline(int &lfd)
 {
 	sockaddr_in	clientAddr;
 	socklen_t	clientAddrLen = sizeof(clientAddr);
@@ -222,78 +239,75 @@ void	Server::acceptCline(int &lfd, std::vector<pollfd> &fds)
 	lmo3idat.fd = incoming_call;
 	lmo3idat.events = POLLIN;
 	lmo3idat.revents = 0;
-	fds.push_back(lmo3idat);
+	_fds.push_back(lmo3idat);
 
 	_clients.insert(std::make_pair(incoming_call, Client(incoming_call, inet_ntoa(clientAddr.sin_addr))));
 }
 
-void	Server::existingClient(int &fd, std::vector<pollfd> &fds, size_t &i)
+void	Server::existingClient(int fd)
 {
 	char	buffer[1024];
 	ssize_t	size = recv(fd, buffer, sizeof(buffer) - 1, 0);
 
 	if (size <= 0)
 	{
-		int dead_fd = fd;
-		close(dead_fd);
-		_clients.erase(dead_fd);
-		fds.erase(fds.begin() + i);
-		i--;
+		disconnect(fd, "Client disconnected");
 		return;
 	}
-
 	buffer[size] = '\0';
 	Client &client = _clients[fd];
 	client.appendToBuffer(buffer, size);
 	client.print();
 
 	std::vector<std::string> cmds = client.splitBuffer();
-	for (size_t j = 0; j < cmds.size(); j++)
+	for (size_t j = 0; j < cmds.size() && _clients.find(fd) != _clients.end(); j++)
 		this->parse_cmd(cmds[j], fd);
 }
 
 void	Server::Run()
 {
-	std::vector<pollfd>	fds;
 	pollfd				lfd;
 
 	lfd.fd = _lfd;
 	lfd.events = POLLIN;
 	lfd.revents = 0;
-	fds.push_back(lfd);
+	_fds.push_back(lfd);
 
 	std::cout << "waiting clinet input" << std::endl;
 	while (true)
 	{
-		for (size_t i = 0; i < fds.size(); i++)
+		for (size_t i = 0; i < _fds.size(); i++)
 		{
-			if (fds[i].fd == _lfd)
+			if (_fds[i].fd == _lfd)
 				continue ;
-			fds[i].events = POLLIN;
-			std::map<int, Client>::iterator it = _clients.find(fds[i].fd);
+			_fds[i].events = POLLIN;
+			std::map<int, Client>::iterator it = _clients.find(_fds[i].fd);
 			if (it != _clients.end() && it->second.hasPendingWrite())
-				fds[i].events |= POLLOUT;
+				_fds[i].events |= POLLOUT;
 		}
 
-		if (poll(fds.data(), fds.size(), -1) < 0)
+		if (poll(_fds.data(), _fds.size(), -1) < 0)
 		{
 			if (errno == EINTR)
 				continue;
 			throw std::runtime_error("poll failed");
 		}
 
-		for (size_t i = 0; i < fds.size(); i++)
+		for (size_t i = 0; i < _fds.size(); i++)
 		{
-			if (fds[i].revents & POLLOUT)
-				flushClient(fds[i].fd);
+			size_t n = _fds.size();
+			if (_fds[i].revents & POLLOUT)
+				flushClient(_fds[i].fd);
 
-			if (fds[i].revents & POLLIN)
+			if (_fds[i].revents & POLLIN)
 			{
-				if (fds[i].fd == _lfd)
-					acceptCline(_lfd, fds);
+				if (_fds[i].fd == _lfd)
+					acceptCline(_lfd);
 				else
-					existingClient(fds[i].fd, fds, i);
+					existingClient(_fds[i].fd);
 			}
+			if (n > _fds.size())
+				i--;
 		}
 	}
 }
