@@ -30,8 +30,9 @@ struct Command
 	std::string					command;
 	std::vector<std::string>	args;
 	std::string					trailing;
+	bool						hasTrailing;
 
-	Command() : command(""), args(std::vector<std::string>()), trailing("") {}
+	Command() : command(""), args(std::vector<std::string>()), trailing(""), hasTrailing(false) {}
 };
 
 struct	findPollFd
@@ -90,9 +91,13 @@ class Server
 		void	setUsername(const Command &cmds, int fd);
 		void	disconnect(int fd, const std::string &quitMessage);
 		void	quit(const Command &cmds, int fd);
+
 		void	joinChannel(const Command &cmds, int fd);
 		void	privMsg(const Command &cmds, int fd);
 		void	kick(const Command &cmds, int fd);
+		void	invite(const Command& cmds, int fd);
+		void	topic(const Command& cmd, int fd);
+		void	changeTopic(const Command& cmd, int fd, Channel& channel, const std::string& channelName); // topic helper function
 		void	ping(const Command &cmds, int fd);
 
 		void	sendToChannel(const std::string& channel, const std::string& message, int fd);

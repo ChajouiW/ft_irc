@@ -5,7 +5,8 @@ CXXFLAGS	= -Wall -Wextra -Werror -std=c++98
 DEPFLAGS	= -MMD -MP
 
 SRCS		= main.cpp Server.cpp Client.cpp Authentication.cpp \
-				join.cpp Channel.cpp PRIVMSG.cpp kick.cpp
+				join.cpp Channel.cpp PRIVMSG.cpp kick.cpp INVITE.cpp\
+				TOPIC.cpp
 
 OBJS		= $(SRCS:.cpp=.o)
 DEPS		= $(OBJS:.o=.d)

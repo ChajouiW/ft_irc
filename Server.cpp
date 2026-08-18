@@ -15,6 +15,8 @@ Server::Server(int port, const std::string &pass) : _lfd(-1), _port(port), _pass
 	_handlers["JOIN"] = &Server::joinChannel;
 	_handlers["PRIVMSG"] = &Server::privMsg;
 	_handlers["KICK"] = &Server::kick;
+	_handlers["INVITE"] = &Server::invite;
+	_handlers["TOPIC"] = &Server::topic;
 }
 
 Server::~Server()
@@ -181,7 +183,10 @@ Command	Server::buildCommand(const std::string &line)
 	cmds.args.erase(cmds.args.begin());
 
 	if (line.find(" :") != std::string::npos)
+	{
 		cmds.trailing = line.substr(line.find(" :") + 2);
+		cmds.hasTrailing = true;
+	}
 	if (!cmds.trailing.empty())
 		cmds.args.push_back(cmds.trailing);
 	return cmds;
