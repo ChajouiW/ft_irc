@@ -17,15 +17,9 @@ void	Server::sendToChannel(const std::string& channel, const std::string& messag
 {
 	std::map<std::string, Channel>::iterator it = _channels.find(toUppercase(channel));
 	if (it == _channels.end())
-	{
-		sendToClient(ERR_NOSUCHCHANNEL(_clients[fd].getNick(), channel), fd);
-		return;
-	}
+		return sendToClient(ERR_NOSUCHCHANNEL(_clients[fd].getNick(), channel), fd);
 	if (!it->second.isInChannel(fd))
-	{
-		sendToClient(ERR_CANNOTSENDTOCHAN(_clients[fd].getNick(), channel), fd);
-		return;
-	}
+		return sendToClient(ERR_CANNOTSENDTOCHAN(_clients[fd].getNick(), channel), fd);
 	std::string fullMessage = _clients[fd].getPrefix() + " PRIVMSG " + it->second.getName() + " :" + message + "\r\n";
 	broadcastMessage(it->first, fullMessage, fd);
 }
@@ -58,9 +52,9 @@ void	joinMessage(std::string& message, const std::vector<std::string>& args, siz
 void	Server::privMsg(const Command &cmds, int fd)
 {
 	if (cmds.args.size() < 1)
-		{sendToClient(ERR_NORECIPIENT(_clients[fd].getNick(), "PRIVMSG"), fd); return;}
+		return sendToClient(ERR_NORECIPIENT(_clients[fd].getNick(), "PRIVMSG"), fd);
 	if (cmds.args.size() < 2)
-		{sendToClient(ERR_NOTEXTTOSEND(_clients[fd].getNick()), fd); return;}
+		return sendToClient(ERR_NOTEXTTOSEND(_clients[fd].getNick()), fd);
 
 	std::vector<std::string> target = extractTarget(cmds.args[0]);
 	std::string message;

@@ -26,20 +26,13 @@ void	Server::newChannel(const std::string &channelName, const std::string &key, 
 void	Server::existingChannel(std::map<std::string, Channel>::iterator it, const std::string &key, int fd)
 {
 	if (it->second.isMember(fd) || it->second.isOperator(fd))
-	{
-		sendToClient(RPL_ALREADYJOINED(_clients[fd].getNick(), it->second.getName()), fd);
-		return;
-	}
+		return sendToClient(RPL_ALREADYJOINED(_clients[fd].getNick(), it->second.getName()), fd);
 	if (it->second.isInviteOnly() && !it->second.isInvited(fd))
-	{
-		sendToClient(ERR_INVITEONLYCHAN(_clients[fd].getNick(), it->second.getName()), fd);
-		return;
-	}
+		return sendToClient(ERR_INVITEONLYCHAN(_clients[fd].getNick(), it->second.getName()), fd);
 	if (it->second.hasKey() && it->second.getKey() != key && !it->second.isInvited(fd))
-	{
-		sendToClient(ERR_BADCHANNELKEY(_clients[fd].getNick(), it->second.getName()), fd);
-		return;
-	}
+		return sendToClient(ERR_BADCHANNELKEY(_clients[fd].getNick(), it->second.getName()), fd);
+	if (it->second.getLimit() > 0 && it->second.getChannelSize() >= it->second.getLimit())
+		return sendToClient(ERR_CHANNELISFULL(_clients[fd].getNick(), it->second.getName()), fd);
 	it->second.addMember(fd);
 	if (it->second.isInvited(fd))
 		it->second.removeInvited(fd);
@@ -74,10 +67,7 @@ std::vector<std::pair<std::string, std::string> > extractChannelsInfo(const std:
 void	Server::joinChannel(const Command &cmds, int fd)
 {
 	if (cmds.args.empty())
-	{
-		sendToClient(ERR_NEEDMOREPARAMS(_clients[fd].getNick(), "JOIN"), fd);
-		return;
-	}
+		return sendToClient(ERR_NEEDMOREPARAMS(_clients[fd].getNick(), "JOIN"), fd);
 	std::vector<std::pair<std::string, std::string> > channeNames = extractChannelsInfo(cmds.args);
 	for (size_t i = 0; i < channeNames.size(); ++i)
 	{

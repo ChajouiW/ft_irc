@@ -20,15 +20,9 @@ void	Server::registerClient(int fd)
 void	Server::checkPass(const Command &cmds, int fd)
 {
 	if (cmds.args.size() < 1)
-	{
-		sendToClient(ERR_NEEDMOREPARAMS(_clients[fd].getNick(), "PASS"), fd);
-		return;
-	}
+		return sendToClient(ERR_NEEDMOREPARAMS(_clients[fd].getNick(), "PASS"), fd);
 	if (_clients[fd].isPass())
-	{
-		sendToClient(ERR_ALREADYREGISTERED(_clients[fd].getNick()), fd);
-		return;
-	}
+		return sendToClient(ERR_ALREADYREGISTERED(_clients[fd].getNick()), fd);
 	if (cmds.args[0] == _password)
 		_clients[fd].setPass(true);
 	else
@@ -54,30 +48,18 @@ bool	isValidNickname(const std::string &nick)
 void	Server::setNickname(const Command &cmds, int fd)
 {
 	if (cmds.args.size() < 1)
-	{
-		sendToClient(ERR_NONICKNAMEGIVEN(_clients[fd].getNick()), fd);
-		return;
-	}
+		return sendToClient(ERR_NONICKNAMEGIVEN(_clients[fd].getNick()), fd);
 	if (!_clients[fd].isPass())
-	{
-		sendToClient(ERR_NOTREGISTERED(_clients[fd].getNick()), fd);
-		return;
-	}
+		return sendToClient(ERR_NOTREGISTERED(_clients[fd].getNick()), fd);
 
 	std::string nick = cmds.args[0];
 	if (cmds.trailing.size() > 0)
 		nick = cmds.trailing;
 
 	if (!isValidNickname(nick))
-	{
-		sendToClient(ERR_ERRONEUSNICKNAME(_clients[fd].getNick(), nick), fd);
-		return;
-	}
+		return sendToClient(ERR_ERRONEUSNICKNAME(_clients[fd].getNick(), nick), fd);
 	if (isInUse(nick))
-	{
-		sendToClient(ERR_NICKNAMEINUSE(_clients[fd].getNick(), nick), fd);
-		return;
-	}
+		return sendToClient(ERR_NICKNAMEINUSE(_clients[fd].getNick(), nick), fd);
 
 	if (_clients[fd].isRegistered())
 	{
@@ -109,25 +91,13 @@ bool	Server::isInUse(const std::string &nick)
 void	Server::setUsername(const Command &cmds, int fd)
 {
 	if (cmds.args.size() < 4)
-	{
-		sendToClient(ERR_NEEDMOREPARAMS(_clients[fd].getNick(), "USER"), fd);
-		return;
-	}
+		return sendToClient(ERR_NEEDMOREPARAMS(_clients[fd].getNick(), "USER"), fd);
 	if (!_clients[fd].isPass())
-	{
-		sendToClient(ERR_NOTREGISTERED(_clients[fd].getNick()), fd);
-		return;
-	}
+		return sendToClient(ERR_NOTREGISTERED(_clients[fd].getNick()), fd);
 	if (_clients[fd].isRegistered())
-	{
-		sendToClient(ERR_ALREADYREGISTERED(_clients[fd].getNick()), fd);
-		return;
-	}
+		return sendToClient(ERR_ALREADYREGISTERED(_clients[fd].getNick()), fd);
 	if (!_clients[fd].getUser().empty())
-	{
-		sendToClient(ERR_ALREADYREGISTERED(_clients[fd].getNick()), fd);
-		return;
-	}
+		return sendToClient(ERR_ALREADYREGISTERED(_clients[fd].getNick()), fd);
 
 	_clients[fd].setUser(cmds.args[0]);
 	_clients[fd].setRealname(cmds.args[3]);
@@ -183,10 +153,7 @@ void	Server::quit(const Command &cmds, int fd)
 void	Server::ping(const Command &cmds, int fd)
 {
 	if (cmds.args.empty())
-	{
-		sendToClient(ERR_NOORIGIN(_clients[fd].getNick()), fd);
-		return;
-	}
+		return sendToClient(ERR_NOORIGIN(_clients[fd].getNick()), fd);
 
 	std::string response = ":" SERVER_NAME " PONG " SERVER_NAME " :" + cmds.args[0] + "\r\n";
 	sendToClient(response, fd);

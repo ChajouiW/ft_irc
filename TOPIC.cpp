@@ -21,33 +21,23 @@ void	Server::changeTopic(const Command& cmd, int fd, Channel& channel, const std
 void	Server::topic(const Command& cmd, int fd)
 {
 	if (cmd.args.empty())
-		{sendToClient(ERR_NEEDMOREPARAMS(_clients[fd].getNick(), "TOPIC"), fd); return;}
+		return sendToClient(ERR_NEEDMOREPARAMS(_clients[fd].getNick(), "TOPIC"), fd);
 
 	std::map<std::string, Channel>::iterator it = _channels.find(toUppercase(cmd.args[0]));
 
 	if (it == _channels.end())
-	{
-		sendToClient(ERR_NOSUCHCHANNEL(_clients[fd].getNick(), cmd.args[0]), fd);
-		return;
-	}
+		return sendToClient(ERR_NOSUCHCHANNEL(_clients[fd].getNick(), cmd.args[0]), fd);
 	Channel& channel = it->second;
 	if (!channel.isInChannel(fd))
-	{
-		sendToClient(ERR_NOTONCHANNEL(_clients[fd].getNick(), channel.getName()), fd);
-		return;
-	}
+		return sendToClient(ERR_NOTONCHANNEL(_clients[fd].getNick(), channel.getName()), fd);
 	if (cmd.args.size() == 1 && !cmd.hasTrailing)
 	{
 		if (channel.getTopic().empty())
-			sendToClient(RPL_NOTOPIC(_clients[fd].getNick(), channel.getName()), fd);
+			return sendToClient(RPL_NOTOPIC(_clients[fd].getNick(), channel.getName()), fd);
 		else
-			sendToClient(RPL_TOPIC(_clients[fd].getNick(), channel.getName(), channel.getTopic()), fd);
-		return;
+			return sendToClient(RPL_TOPIC(_clients[fd].getNick(), channel.getName(), channel.getTopic()), fd);
 	}
 	if (channel.isTopicRestricted() && !channel.isOperator(fd))
-	{
-		sendToClient(ERR_CHANOPRIVSNEEDED(_clients[fd].getNick(), channel.getName()), fd);
-		return;
-	}
+		return sendToClient(ERR_CHANOPRIVSNEEDED(_clients[fd].getNick(), channel.getName()), fd);
 	changeTopic(cmd, fd, channel, it->first);
 }

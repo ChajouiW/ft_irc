@@ -17,6 +17,7 @@ Server::Server(int port, const std::string &pass) : _lfd(-1), _port(port), _pass
 	_handlers["KICK"] = &Server::kick;
 	_handlers["INVITE"] = &Server::invite;
 	_handlers["TOPIC"] = &Server::topic;
+	_handlers["MODE"] = &Server::mode;
 }
 
 Server::~Server()
@@ -39,6 +40,22 @@ int	Server::getClientfd(const std::string &nick)
 			return it->first;
 	}
 	return -1;
+}
+
+Client&	Server::getClient(int fd)
+{
+	std::map<int, Client>::iterator it = _clients.find(fd);
+	if (it == _clients.end())
+		throw std::runtime_error("Client not found");
+	return it->second;
+}
+
+Channel&	Server::getChannel(const std::string &channelName)
+{
+	std::map<std::string, Channel>::iterator it = _channels.find(toUppercase(channelName));
+	if (it == _channels.end())
+		throw std::runtime_error("Channel not found");
+	return it->second;
 }
 
 /* ========================================================================== */
@@ -206,17 +223,11 @@ void	Server::parse_cmd(const std::string &cmd, int fd)
 
 	std::map<std::string, CmdHandler>::iterator it = _handlers.find(cmds.command);
 	if (it == _handlers.end())
-	{
-		sendToClient(ERR_UNKNOWNCOMMAND(_clients[fd].getNick(), cmds.command), fd);
-		return ;
-	}
+		return sendToClient(ERR_UNKNOWNCOMMAND(_clients[fd].getNick(), cmds.command), fd);
 
 	if (needsRegistration(cmds.command)
 		&& (!_clients[fd].isPass() || !_clients[fd].isRegistered()))
-	{
-		sendToClient(ERR_NOTREGISTERED(_clients[fd].getNick()), fd);
-		return ;
-	}
+		return sendToClient(ERR_NOTREGISTERED(_clients[fd].getNick()), fd);
 	(this->*(it->second))(cmds, fd);
 }
 
@@ -291,7 +302,7 @@ void	Server::Run()
 				_fds[i].events |= POLLOUT;
 		}
 
-		if (poll(_fds.data(), _fds.size(), -1) < 0)
+		if (poll(&_fds[0], _fds.size(), -1) < 0)
 		{
 			if (errno == EINTR)
 				continue;

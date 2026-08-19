@@ -6,7 +6,7 @@ DEPFLAGS	= -MMD -MP
 
 SRCS		= main.cpp Server.cpp Client.cpp Authentication.cpp \
 				join.cpp Channel.cpp PRIVMSG.cpp kick.cpp INVITE.cpp\
-				TOPIC.cpp
+				TOPIC.cpp MODE.cpp
 
 OBJS		= $(SRCS:.cpp=.o)
 DEPS		= $(OBJS:.o=.d)

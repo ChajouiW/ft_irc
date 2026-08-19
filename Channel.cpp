@@ -10,11 +10,17 @@ Channel::~Channel() {}
 
 bool Channel::addMember(int fd)
 {
+	if (_limit > 0 && getChannelSize() >= _limit)
+		return false;
 	return _members.insert(fd).second;
 }
 
 bool Channel::addOperator(int fd)
 {
+	if (_limit > 0 && getChannelSize() >= _limit && !isInChannel(fd))
+		return false;
+	if (isMember(fd))
+		_members.erase(fd);
 	return _operators.insert(fd).second;
 }
 
@@ -24,7 +30,16 @@ void	Channel::cancelInvits(int fd)
 		_invited.erase(fd);
 }
 
-void Channel::removeMember(int fd)
+void	Channel::removeOperator(int fd)
+{
+	if (_operators.find(fd) != _operators.end())
+	{
+		_operators.erase(fd);
+		_members.insert(fd);
+	}
+}
+
+void	Channel::removeMember(int fd)
 {
 	if (_members.find(fd) != _members.end())
 		_members.erase(fd);
@@ -76,6 +91,11 @@ const std::string& Channel::getTopic() const
 int Channel::getLimit() const
 {
 	return _limit;
+}
+
+int	Channel::getChannelSize() const
+{
+	return _members.size() + _operators.size();
 }
 
 bool Channel::isInviteOnly() const

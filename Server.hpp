@@ -99,6 +99,8 @@ class Server
 		void	topic(const Command& cmd, int fd);
 		void	changeTopic(const Command& cmd, int fd, Channel& channel, const std::string& channelName); // topic helper function
 		void	ping(const Command &cmds, int fd);
+		void	mode(const Command &cmds, int fd);
+		void	changeMode(const Command &cmds, int fd, std::string &modeUpdates);
 
 		void	sendToChannel(const std::string& channel, const std::string& message, int fd);
 		void	toClient(const std::string& target, const std::string& message, int fd);
@@ -108,6 +110,9 @@ class Server
 		void	registerClient(int fd);
 		bool	isInUse(const std::string &nick);
 		int		getClientfd(const std::string &nick);
+
+		Client&		getClient(int fd);
+		Channel&	getChannel(const std::string &channelName);
 };
 std::string	toUppercase(std::string str);
 void	joinMessage(std::string& message, const std::vector<std::string>& args, size_t startIndex);

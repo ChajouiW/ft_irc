@@ -25,14 +25,13 @@ class Channel
 		Channel(const std::string &name, const std::string &key);
         ~Channel();
 
-        bool addMember(int fd);
-		bool addOperator(int fd);
-		void cancelInvits(int fd);
-        void removeMember(int fd);
-        bool isMember(int fd) const;
-		bool isOperator(int fd) const;
-		bool isInChannel(int fd) const;
+        bool	addMember(int fd);
+		bool	addOperator(int fd);
+		void	cancelInvits(int fd);
+        void	removeMember(int fd);
+		void	removeOperator(int fd);
 
+		
 		//getters
         const std::set<int>&	getMembers() const;
         const std::set<int>&	getOperators() const;
@@ -40,12 +39,16 @@ class Channel
 		const std::string&		getKey() const;
         const std::string&		getTopic() const;
 		
-
-		int					getLimit() const;
-		bool isInvited(int fd) const;
-		bool isInviteOnly() const;
-		bool hasKey() const;
-		bool isTopicRestricted() const;
+		
+		int		getLimit() const;
+		int		getChannelSize() const;
+        bool	isMember(int fd) const;
+		bool	isOperator(int fd) const;
+		bool	isInChannel(int fd) const;
+		bool	isInvited(int fd) const;
+		bool	isInviteOnly() const;
+		bool	hasKey() const;
+		bool	isTopicRestricted() const;
 
 		void addInvited(int fd);
 		void removeInvited(int fd);
