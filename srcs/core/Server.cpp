@@ -156,8 +156,8 @@ void	Server::flushClient(int fd)
 
 	if (n > 0)
 		it->second.consumeWriteBuffer(static_cast<size_t>(n));
-	// else if (n < 0)
-	// 	it->second.setWriteBuffer("");
+	else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+		it->second.setWriteBuffer("");
 }
 
 /* ========================================================================== */
@@ -290,7 +290,7 @@ void	Server::Run()
 	_fds.push_back(lfd);
 
 	std::cout << "waiting clinet input" << std::endl;
-	while (true)
+	while (!g_stop)
 	{
 		for (size_t i = 0; i < _fds.size(); i++)
 		{

@@ -180,8 +180,17 @@ Verify: abrupt kills, garbage input → no crash, no leaks.
 
 - `[x]` `Server::removeClientFromChannels(fd, quitMessage)` exists and is called from `disconnect`,
   so the Channel membership goes before the Client does — the ownership order this phase is about.
-- `[ ]` valgrind never run.
-- `[ ]` abrupt-kill / garbage-input pass never run.
+- `[x]` **signals** — `main.cpp` sets `SIGPIPE` to `SIG_IGN` (a `send()` to a dead peer now returns
+  `-1/EPIPE` instead of killing the process) and catches `SIGINT`/`SIGTERM` into
+  `volatile sig_atomic_t g_stop`. `Run()` loops on `while (!g_stop)`, so `~Server()` finally runs
+  and closes every fd. The `EINTR` branch on `poll()` is what wakes the loop to see the flag.
+  Verified: `/proc/<pid>/status` shows SIGPIPE ignored, SIGINT+SIGTERM caught; Ctrl-C exits 0 and
+  prints "Server shutting down..." (before, it died on signal 130 and never ran the destructor).
+- `[x]` **abrupt-kill pass** — 25 rounds of `SO_LINGER{1,0}` RST disconnects with 400 bytes still
+  queued for the dead client: server survived every round, `00:00:00` CPU time (no spin), clean
+  exit afterwards.
+- `[ ]` valgrind never run — **valgrind is not installed on this machine** (`pacman -S valgrind`).
+- `[ ]` garbage-input pass never run.
 - `[ ]` the two owed verifies inherited from Phases 3 and 7 (byte-at-a-time framing, per-flag MODE).
 
 ---
@@ -195,6 +204,8 @@ show the line, let me decide.
 
 - `includes/Server.hpp:58` — `// std::vector<int> _client_fds;` is a commented-out dead member.
   `Run()` keeps its poll set in `_fds`. Just noise now; delete when you next touch the header.
+- `Server::Run()` never tests `POLLERR` or `POLLHUP`, only `POLLIN`/`POLLOUT`. A socket in an error
+  state is noticed indirectly (via `recv` returning `<= 0`), which works but is not explicit.
 
 *Owed verifications (not bugs — missing evidence):*
 
@@ -229,3 +240,10 @@ show the line, let me decide.
   string and must not be truncated at a `\0`.
 - `Client`'s default constructor sets `_fd = -1`, because `std::map::operator[]` default-constructs
   on a missing key and an uninitialized fd would later get `close()`d.
+- **On a fatal `send()` error, `flushClient` clears the write buffer — it does not `disconnect()`.**
+  Deliberate. `flushClient` is called from inside `Run()`'s loop over `_fds`, and `disconnect()`
+  erases from `_fds`; erasing the element being iterated would shift the vector under the loop and
+  read `_fds[i]` out of range when `i` was the last index. Clearing the buffer instead drops
+  `hasPendingWrite()` to false, `POLLOUT` stops being armed (no spin), and the dead socket is
+  reaped normally on the next `recv() <= 0`. `EAGAIN`/`EWOULDBLOCK` are excluded — those are not
+  errors, and clearing on them would silently discard real output.

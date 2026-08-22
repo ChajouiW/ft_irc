@@ -18,8 +18,11 @@
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <csignal>
 
 typedef struct pollfd pollfd;
+
+extern volatile sig_atomic_t	g_stop;
 
 #include "Client.hpp"
 #include "Channel.hpp"
