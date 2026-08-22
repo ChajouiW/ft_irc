@@ -55,20 +55,32 @@ make        # -> ./ircserv
 ./ircserv <port> <password>
 ```
 
-Sources: `main.cpp`, `Server.cpp`, `Authentication.cpp`; headers `Server.hpp`, `Client.hpp`,
-`ft_irc.hpp`. `Server.hpp` and `Client.hpp` are still mostly method-bodies-in-the-header.
+**`make` links clean** with `-Wall -Wextra -Werror -std=c++98`.
 
-**`make` does not currently link.** The Makefile still has `SRCS = main.cpp` only, so
-`Server.cpp` and `Authentication.cpp` are never compiled — every out-of-line method
-(`parse_cmd`, `authenticate`, `set_nickname`, `set_username`, `disconnect`) would be an undefined
-reference at link time. See "Known open bugs".
+Layout:
+
+```
+includes/        ft_irc.hpp  Server.hpp  Client.hpp  Channel.hpp  Command.hpp
+srcs/
+  main.cpp
+  core/          Server.cpp  Client.cpp  Channel.cpp
+  commands/      Authentication.cpp  join.cpp  PRIVMSG.cpp  kick.cpp
+                 INVITE.cpp  TOPIC.cpp  MODE.cpp
+docs/            roadmap.txt, vscode-mcp-setup.md, reference/bircd.tar.gz — not source
+```
+
+Headers are found through `-I includes`, so sources keep plain `#include "Server.hpp"`.
+`.o` files are built **beside their `.cpp`** (`srcs/core/Server.o`) and are gitignored.
+When you add a `.cpp`, add it to `SRCS` with its full path from the repo root.
+
+**No dependency tracking.** `-MMD -MP` and the `.d` files were removed on purpose, so make only
+knows `foo.o` depends on `foo.cpp` — **not** on any header. Edit a `.hpp` and `make` will say
+`Nothing to be done for 'all'` and happily link stale objects. **After touching any header, run
+`make re`.**
 
 There is no test suite. Verification is manual, per the *Verify* line of the current slice
 (`nc localhost <port>`, `ss -tlnp | grep <port>`, later a real IRC client).
-
-Stray files in the repo root that are **not** part of the build and should not be read as source:
-`a.out`, `f.txt`, `zoba3`, `bircd.tar.gz` (a reference implementation tarball),
-`Write vscode-mcp-setup.md (ne9kyk)`.
+Note: `nc` is **not installed** on this machine — use a short python3 socket script instead.
 
 ---
 
@@ -98,7 +110,7 @@ Why first: you always have something that compiles; every later slice extends a 
 
 This became `Server::Run()` — the heart of the project.
 
-### Phase 3 — Per-client buffering `[~]`  ← **WE ARE HERE**
+### Phase 3 — Per-client buffering `[x]`
 Learn: TCP is a boundary-less stream — one `send` can arrive as `com` → `man` → `d`, and two
 commands can arrive in a single `recv`. Message framing is **our** job, not TCP's.
 Work: `Client::_buffer` + append-on-recv + cut-on-`\r\n`.
@@ -106,92 +118,107 @@ Verify: send one byte at a time through `nc`, the command still assembles correc
 
 - `[x]` `Client` class shape: `_fd`, `_buffer`, `appendToBuffer(data, size)`, `getFd()`, destructor.
 - `[x]` `Server` holds `std::map<int, Client>`; accept inserts, disconnect erases.
-- `[~]` framing — `extractCommand()` was replaced by `Client::splitBuffer()`, which `getline`s the
-  whole buffer into a vector of lines. Two things still missing, and they are the *whole point* of
-  the phase: it **never erases the consumed bytes from `_buffer`**, so every `recv` re-emits all
-  previous commands; and a trailing fragment with no `\r\n` yet is handed back as if it were a
-  complete command. A partial line must stay in the buffer until its delimiter arrives.
+- `[x]` framing — `Client::splitBuffer()` (`srcs/core/Client.cpp`) loops on `find('\n')`, strips a
+  trailing `\r`, and **erases the consumed bytes** with `_buffer.erase(0, pos + 1)`. An
+  unterminated tail stays in `_buffer` until its delimiter arrives. This was the open slice.
 - `[x]` `Server` drains in a loop after each `recv` — `Run()` iterates `cmds` and calls `parse_cmd`
   per line.
-- `[ ]` Verify with byte-at-a-time `nc`. **This is the gate for calling Phase 3 done.**
+- `[ ]` Byte-at-a-time verify still never actually run. The code reads correct; the *evidence* is
+  missing. Worth doing once in Phase 8 with a python socket script (no `nc` here).
 
-### Phase 4 — Parsing `[~]`
+### Phase 4 — Parsing `[x]`
 Learn: the `:prefix CMD params :trailing` grammar.
-Work: a **stateless** Parser turning one line into a `Message` struct + a dispatcher.
+Work: a **stateless** Parser turning one line into a struct + a dispatcher.
 Verify: feed raw lines, get correct structs.
 
-- Reality: `Server::parse_cmd` (`Server.cpp`) is an if/else-if dispatcher on `tokens[0]`, and
-  `Server::split_cmd` is a whitespace tokenizer. There is no `Message` struct and no `:trailing`
-  handling yet — so `USER u 0 * :Real Name` does not parse correctly.
-- The comment at the top of `Server.hpp` wants a `std::map<std::string, handler>` dispatch table
-  instead of the if/else chain. In C++98 that means `typedef void (Server::*handler)(...)` — a
-  **pointer-to-member**, called as `(this->*table[cmd])(args)`. All handlers must then share one
-  signature; today they do not (`set_username` takes a token vector, the others take a string).
+- `Command` struct (`Server.hpp`): `command`, `args`, `trailing`, `hasTrailing`.
+  `Server::buildCommand` fills it, `Server::split_cmd` tokenizes, `Server::parse_cmd` dispatches.
+- The if/else chain is gone: dispatch is `std::map<std::string, CmdHandler>` where
+  `typedef void (Server::*CmdHandler)(const Command &cmds, int fd)` — a **pointer-to-member**,
+  so every handler shares one signature. This is what the old `Server.hpp` comment was asking for.
+- `Server::needsRegistration` gates commands that require a registered client.
 
-### Phase 5 — Registration `[~]`
+### Phase 5 — Registration `[x]`
 Learn: the PASS → NICK → USER state machine + numeric replies.
 Work: handlers + `Client` state flags + numerics 001 / 433 / 464.
 Verify: a real client (HexChat / irssi) fully registers.
 **Milestone — proves the whole pipeline end to end.**
 
-- Reality: `Authentication.cpp` has `authenticate()` (PASS) written; `set_nickname`,
-  `set_username`, `disconnect` are empty stubs. `Client::_authenticated` exists but has no
-  accessors. Replies are plain English strings, not numerics.
+- `srcs/commands/Authentication.cpp`: `checkPass`, `setNickname`, `setUsername`, `registerClient`,
+  `quit`, `disconnect` all implemented. `Client` carries `_pass` / `_registered` with accessors.
+- Replies are real numerics from the macro set in `includes/Command.hpp` (001, 431/432/433,
+  451, 461, 462, 464, …).
+- Verified: `PASS`/`NICK`/`USER` over a socket returns
+  `:ircserv 001 bob :Welcome to the IRC Network bob!b@127.0.0.1`.
 
-> **Note on ordering.** Code for Phases 4 and 5 landed before Phase 3's verify step passed —
-> the opposite of rule 1. Before adding anything new here, finish the framing fix and its
-> byte-at-a-time verification.
-
-### Phase 6 — Channels + relay `[ ]`
+### Phase 6 — Channels + relay `[x]`
 Learn: a channel is a named member list; the first joiner is operator.
 Work: `Channel` class, `JOIN`, `PRIVMSG` fan-out with prefix stamping.
 Verify: two clients chat through the server.
 
-### Phase 7 — Operators + MODE `[ ]`
+- `Channel.hpp` / `Channel.cpp`, `commands/join.cpp`, `commands/PRIVMSG.cpp`.
+- `Server::broadcastMessage` (two overloads — with and without an fd to skip),
+  `sendToChannel`, `toClient`, `getMembersList`, `joinAlert` (353/366).
+- Writes go through `sendToClient` → per-client `_writeBuffer`, flushed on `POLLOUT`
+  (`Server.cpp:302` arms it, `:315` drains it). The old "send on a POLLIN-only fd" violation is gone.
+
+### Phase 7 — Operators + MODE `[x]`
 One slice per command: `KICK`, `INVITE`, `TOPIC`, then MODE flags one at a time: `i`, `t`, `k`, `o`, `l`.
 Work: permission checks + mode state on `Channel`.
 Verify: each flag enforces correctly.
 
-### Phase 8 — Robustness `[ ]`
+- `commands/kick.cpp`, `commands/INVITE.cpp`, `commands/TOPIC.cpp`, `commands/MODE.cpp`.
+- All five flags handled in the `switch` in `MODE.cpp` (`i` `t` `k` `l` `o`), with `+`/`-` tracking
+  and 324/472/482 replies.
+- `[ ]` Per-flag enforcement never verified with two live clients — that verify is still owed.
+
+### Phase 8 — Robustness `[~]`  ← **WE ARE HERE**
 Learn: the never-crash / no-leak discipline; **ownership order** — remove the Client pointer from
 every Channel *before* the Server destroys it.
 Work: disconnect cleanup, valgrind-clean.
 Verify: abrupt kills, garbage input → no crash, no leaks.
 
+- `[x]` `Server::removeClientFromChannels(fd, quitMessage)` exists and is called from `disconnect`,
+  so the Channel membership goes before the Client does — the ownership order this phase is about.
+- `[ ]` valgrind never run.
+- `[ ]` abrupt-kill / garbage-input pass never run.
+- `[ ]` the two owed verifies inherited from Phases 3 and 7 (byte-at-a-time framing, per-flag MODE).
+
 ---
 
 ## Known open bugs (not yet fixed — mine to fix)
 
-Ordered by what blocks the build first. **Do not fix these unsolicited** — rule 3 applies: name it,
+Ordered by what blocks first. **Do not fix these unsolicited** — rule 3 applies: name it,
 show the line, let me decide.
-
-*Compile / link blockers:*
-
-- `Server.hpp:52` — `setAuthenticated()` is defined on **`Server`** but assigns `_authenticated`,
-  which is a member of **`Client`**. This is the error `make` stops on right now. The setter belongs
-  on `Client`.
-- `Authentication.cpp:40` and `:44` — `Server::disconnect` is defined **twice**, identically.
-  Duplicate definition.
-- `Authentication.cpp:27` — calls `authenticated(fd)`, which is declared nowhere.
-- `Makefile:7` — `SRCS = main.cpp` only; `Server.cpp` and `Authentication.cpp` are never built.
 
 *Logic:*
 
-- `Client::splitBuffer()` never erases from `_buffer` and treats an unterminated trailing fragment
-  as a finished command — see Phase 3 above. This is the current slice.
-- `Server.hpp:35` — `_client_fds` is declared but never used; `Run()` keeps its poll set in a local
-  `fds` vector instead. Dead member.
-- `Authentication.cpp:16,21` — `send()` is called on an fd that `poll()` only reported as
-  `POLLIN`-ready, not `POLLOUT`-ready. That violates the "never send unless poll said so" constraint
-  and will need an outgoing per-client buffer + `POLLOUT` before Phase 8.
-- `Client.hpp` uses `std::cout` and `std::vector` without including `<iostream>` / `<vector>`;
-  `Server.hpp` uses `std::istringstream` without `<sstream>`. Both only compile because of include
-  order through `Server.hpp`. Fragile.
+- `includes/Server.hpp:58` — `// std::vector<int> _client_fds;` is a commented-out dead member.
+  `Run()` keeps its poll set in `_fds`. Just noise now; delete when you next touch the header.
+
+*Owed verifications (not bugs — missing evidence):*
+
+- byte-at-a-time framing (Phase 3 gate), per-flag MODE enforcement (Phase 7), valgrind,
+  abrupt-kill / garbage-input survival. All four are Phase 8 work.
 
 *Fixed (kept for the lesson):*
 
 - ~~disconnect path erased from `fds` before `_clients`, so the wrong map entry was erased~~ —
-  fixed in `Server.hpp:133`: `dead_fd` is saved into a local first.
+  `dead_fd` is saved into a local first.
+- ~~`setAuthenticated()` was defined on `Server` but assigned `Client::_authenticated`~~ — the
+  whole `_authenticated` flag is gone, replaced by `Client::_pass` / `_registered` with accessors.
+  Lesson: a setter lives on the class that owns the field.
+- ~~`Server::disconnect` defined twice, identically~~ — one definition, `Authentication.cpp:129`.
+- ~~call to `authenticated(fd)`, declared nowhere~~ — gone.
+- ~~`Makefile` built `main.cpp` only, so every out-of-line method was an undefined reference~~ —
+  `SRCS` now lists all eleven sources.
+- ~~`splitBuffer()` never erased consumed bytes and returned an unterminated tail as a command~~ —
+  fixed; see Phase 3. **This was the real lesson of the project: framing is the application's job.**
+- ~~`send()` called on an fd `poll()` only reported `POLLIN`-ready~~ — there is now a per-client
+  `_writeBuffer` + `hasPendingWrite()` + `POLLOUT`, which is the instant-fail constraint satisfied.
+- ~~`Client.hpp` used `std::cout`/`std::vector` and `Server.hpp` used `std::istringstream` without
+  their includes, compiling only by include-order luck~~ — both headers include what they use.
+  Lesson: a header must be self-sufficient.
 
 ## Design decisions already made (don't relitigate)
 

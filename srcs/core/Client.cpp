@@ -20,7 +20,7 @@ Client& Client::operator=(const Client &other)
 		_realname = other._realname;
 		_pass = other._pass;
 		_registered = other._registered;
-		_buffer = other._buffer;
+		_writeBuffer = other._writeBuffer;
 	}
 	return *this;
 }
